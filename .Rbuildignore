@@ -1,2 +1,7 @@
 ^estilex\.Rproj$
 ^\.Rproj\.user$
+^LICENSE\.md$
+^\.github$
+^data-raw$
+^estilex_ROADMAP\.md$
+^README\.Rmd$

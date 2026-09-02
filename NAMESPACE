@@ -2,4 +2,5 @@
 
 export(etx_get_doc)
 export(etx_get_paragraphs)
+export(etx_get_references)
 export(etx_get_text)

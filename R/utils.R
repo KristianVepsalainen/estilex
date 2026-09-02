@@ -126,6 +126,11 @@ etx_request <- function(url) {
     httr2::req_user_agent(estilex_user_agent()) |>
     httr2::req_retry(
       max_tries = 3,
+      # A short, fixed backoff. The 500s this service produces come from a
+      # missing identifier or an intermittent fault, neither of which is
+      # helped by waiting longer, and the default exponential backoff makes
+      # the test suite slow for no benefit.
+      backoff = function(i) min(0.5 * i, 2),
       is_transient = function(resp) {
         httr2::resp_status(resp) %in% c(429L, 500L, 502L, 503L, 504L)
       }

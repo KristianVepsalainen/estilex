@@ -68,6 +68,16 @@ unpleasant, \code{dest} lets you keep it somewhere of your choosing:
 
 A path given in \code{dest} is used again on subsequent calls without
 re-downloading, unless \code{refresh = TRUE}.
+
+Better still, set the \code{ESTILEX_CORPUS_DIR} environment variable once, in
+\verb{~/.Renviron}:
+
+\if{html}{\out{<div class="sourceCode">}}\preformatted{ESTILEX_CORPUS_DIR=~/riigiteataja
+}\if{html}{\out{</div>}}
+
+estilex then picks up an archive already in that directory without being
+asked, so \code{\link[=etx_list_documents]{etx_list_documents()}} and \code{\link[=etx_get_parallel]{etx_get_parallel()}} work immediately
+in a new session. \code{usethis::edit_r_environ()} opens the file.
 }
 
 \examples{

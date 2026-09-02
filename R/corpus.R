@@ -451,7 +451,8 @@ archive_size <- function(url) {
 ETX_LARGE_DOWNLOAD <- 5 * 1024^3
 
 #' @noRd
-confirm_large_download <- function(size, name, force, progress) {
+confirm_large_download <- function(size, name, force, progress,
+                                   interactive = base::interactive()) {
 
   if (isTRUE(force) || is.na(size) || size < ETX_LARGE_DOWNLOAD) {
     return(invisible(TRUE))
@@ -461,7 +462,7 @@ confirm_large_download <- function(size, name, force, progress) {
                 ". Downloading it will take a long time and use that much ",
                 "disk space.")
 
-  if (!interactive()) {
+  if (!isTRUE(interactive)) {
     etx_abort(
       msg,
       "Pass force = TRUE to proceed in a non-interactive session.",
@@ -469,8 +470,9 @@ confirm_large_download <- function(size, name, force, progress) {
     )
   }
 
-  message(msg)
+  message(msg, "\n")
   answer <- readline("Continue? [y/N] ")
+
   if (!tolower(trimws(answer)) %in% c("y", "yes")) {
     etx_abort("Download cancelled.", class = "estilex_large_download")
   }

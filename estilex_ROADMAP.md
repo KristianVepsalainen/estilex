@@ -10,64 +10,88 @@ public API and its open data archives. Part of **lexverse**, alongside
   language code)
 - API base: `https://www.riigiteataja.ee/public-api/api/v1`
 - Bulk: `https://www.riigiteataja.ee/avaandmed/ERT/`
+- Contact: Eve Agur, product manager, enforcement and legal information team,
+  Centre of Registers and Information Systems (RIK)
 
 ---
 
-## 1. The largest risk
+## 1. Status
 
-**The API is undocumented.** It replaced the previous system on 1 June 2026,
-and there is no OpenAPI specification on either the production or the beta
-host. Probing for one is misleading: `openapi.json`, `/swagger` and similar
-paths all return HTTP 200 with `text/html`, because the site is an Angular
+Ten exported functions, 203 tests, of which about 150 run offline. The
+document-level API is complete: retrieval, text, provisions, amendment
+history, translations, section-aligned parallel texts, and corpus
+enumeration from the archives.
+
+Remaining before CRAN: README, vignette, spell check, version bump, the
+usual check matrix. See section 12.
+
+---
+
+## 2. The standing risk
+
+**The API is undocumented, and will stay that way for now.** It replaced the
+previous system on 1 June 2026. Asked in September 2026 whether a
+machine-readable specification existed, the Riigi Teataja replied that there
+is none and that they will consider the need as usage and integration demands
+grow.
+
+Probing for one is misleading: `openapi.json`, `/swagger` and similar paths
+all return HTTP 200 with `text/html`, because the site is an Angular
 application that serves `index.html` for any route it does not recognise.
-Every endpoint below was found by trial.
+Every endpoint below was found by trial and then confirmed by correspondence.
 
-A message was sent to `ert@riigiteataja.ee` on 2026-09-01 reporting three
-defects and asking five questions. No reply as of this writing. Send a
-reminder in the same thread around late September, and add the observation
-that the translation metadata endpoint has now failed on four separate days,
-which makes it a persistent fault rather than the intermittent one described
-in the original message.
+**Some endpoints are explicitly unsupported.** Asked about the parameters
+`/akt/{id}/redaktsioonid` accepts, they replied that APIs built for special
+functions are meant for the user interface and carry no public support. That
+answer settles a design question rather than leaving one open — see section 9.
 
-Until there is a reply, treat every endpoint as provisional.
+Treat the supported surface as: `/akt/{id}`, `/akt/{id}/xml`, and their `/en/`
+counterparts. Everything else may change without notice.
 
 ---
 
-## 2. Endpoints
+## 3. Endpoints
 
 | Endpoint | Returns |
 |---|---|
-| `/akt/{id}` | JSON metadata |
-| `/akt/{id}/xml` | XML content and metadata |
-| `/akt/{grupiId}/redaktsioonid` | list of consolidated versions |
+| `/akt/{id}` | JSON metadata, Estonian text |
+| `/akt/{id}/xml` | XML content and metadata, Estonian text |
+| `/en/akt/{id}` | JSON metadata, translation |
+| `/en/akt/{id}/xml` | XML content and metadata, translation |
+| `/akt/{grupiId}/redaktsioonid` | version list — **unsupported**, see section 9 |
 
 Absent (clean 404): `/aktid`, `/otsing`, `/search`, `/avalik/*`,
 `/grupp/{id}`, `/eli/{id}`, `/tolge/{id}`, `/akt/{id}/tolge`.
 
-Broken: `/akt/{translationId}/xml` returns HTTP 500 with an empty body, and
-`/akt/{translationId}` (metadata) has failed the same way on four separate
-days having worked during the initial mapping. **Translations must come from
-the bulk archive**, for metadata as well as content.
-
 **There is no enumeration or search endpoint.** Identifiers come from the
-bulk archives only.
+bulk archives, or from references inside documents already retrieved.
 
 Error format is a useful probing signal: unknown sub-paths under a valid
 `/akt/{id}` return YAML (`staatus: "Viga"`, `vead: ["Tundmatu päring"]`),
 whereas wholly unknown paths return an empty body. A YAML error means the
 route pattern exists.
 
+Unknown identifiers returned HTTP 500 in September 2026 and HTTP 404 in
+October. estilex treats both as non-fatal, since a 500 cannot be told apart
+from a genuine outage, and the test asserting this accepts either.
+
 ---
 
-## 3. Parsing hazards
+## 4. Parsing hazards
 
-The service returns correct data with incorrect metadata in six ways. Each
-needs an explicit workaround, and all six are covered by regression tests.
+The service returns correct data with incorrect metadata in several ways.
+Each needs an explicit workaround, and all are covered by regression tests.
 
 1. **XML is served as `application/octet-stream`.** `resp_body_xml()` needs
-   `check_type = FALSE`. A consequence of serving from S3.
+   `check_type = FALSE`. Not a side effect of S3, as first assumed — it was
+   changed deliberately for the system's own reasons. The Riigi Teataja
+   agrees that separating public from internal APIs would let the public one
+   use `application/xml` correctly, but that is a long-term intention.
 2. **The namespace declaration is not an absolute URI** — `tyviseadus_1_10.02.2010`
-   for acts, `Juurakt` for translations — and varies per document. Call
+   for acts, `Juurakt` for translations — and varies per document. The XML
+   schema dates from 2009 and was built around their own validation and
+   transformation needs rather than public standards. Conformance is
+   achievable but depends on their client's priorities. Call
    `xml_ns_strip()` immediately after parsing, then use plain XPath.
 3. **JSON and XML expose different fields.** The translation link exists in
    JSON but not XML. Never infer one from the other.
@@ -85,7 +109,7 @@ needs an explicit workaround, and all six are covered by regression tests.
 
 ---
 
-## 4. Identifiers
+## 5. Identifiers
 
 Format `{type:1}{day:2}{month:2}{year:4}{sequence:3}`:
 
@@ -94,35 +118,40 @@ Format `{type:1}{day:2}{month:2}{year:4}{sequence:3}`:
 523042025002  ->  5 | 23 | 04 | 2025 | 002   translation
 ```
 
-The leading digit distinguishes language: 1 = Estonian, 5 = translation. All
-6,391 files in the current English archive begin with 5.
+A leading 5 marks a translation and routes the request to `/en/`.
 
-**But the format is not universal.** Older consolidated versions use short
-sequential numbers in the same space — the Constitution's versions run
-`111042025003`, `115052015002`, `127042011002`, `12846827`, `633949`,
-`24304`. Handle identifiers as **character**, never as a fixed width.
+**The leading digit only carries meaning in the twelve-digit form.** Older
+consolidated versions use short sequential numbers in the same space — the
+Constitution's versions run `111042025003`, `115052015002`, `127042011002`,
+`12846827`, `633949`, `24304` — and `550572`, an act amending the
+Constitution, begins with 5 without being a translation. Routing on the
+leading digit alone sent it to `/en/akt/550572`, which does not exist. The
+check is now `nchar(id) == 12 && substr(id, 1, 1) == "5"`.
 
-They fit in double precision (twelve digits < 2^53), so
-`format(x, scientific = FALSE)` suffices when reading JSON. No bigint
-handling is needed.
+That bug reached the test suite and was caught there. It is the clearest
+argument in this package for testing the reference-following path rather than
+only the happy one.
 
-Two identifier spaces coexist and both work in `redaktsioonid`:
+Identifiers are handled as **character** throughout. They fit in double
+precision (twelve digits < 2^53), so `format(x, scientific = FALSE)` suffices
+when reading JSON, but they are identifiers, not numbers.
+
+Two identifier spaces coexist:
 
 - `kehtivId` / act id — one consolidated version
 - `grupiId` / `terviktekstiGrupiID` — the act across all versions
 
+Group identifiers are **not** shared between languages. A translation's group
+belongs to a separate space from the Estonian act's, and `redaktsioonid` on a
+translation group returns that translation's own earlier versions.
+`tolkeSeosId` is the only bridge, and it works in both directions.
+
 `aktViide` inside `muutmismarge` uses the same space as act ids, so the
 citation network is traversable without a lookup table.
 
-Group identifiers are **not** shared between languages. A translation's
-`terviktekstiGrupiID` (e.g. 100515) belongs to a separate space from the
-Estonian act's (e.g. 151381), and `redaktsioonid` on a translation group
-returns that translation's own earlier versions. `tolkeSeosId` is the only
-bridge.
-
 ---
 
-## 5. Document structure
+## 6. Document structure
 
 ```
 oigusakt
@@ -165,12 +194,9 @@ regression test:
   equivalent markers are dropped. Estonian cross-references cite sub-points
   ("§ 12 punkt 3"), so removing them costs more than the noise they add.
 
-Cleaner than the Danish equivalent overall: markers live in their own
-elements, so there is no run-together problem in the general case.
-
 ---
 
-## 6. Amendment history
+## 7. Amendment history
 
 `muutmismarge` fields, stable across three documents: `aktikuupaev`,
 `avaldamismarge/{RTosa, RTaasta, RTnr, RTartikkel, aktViide}`, `joustumine`.
@@ -194,15 +220,38 @@ analyses, and translations into Ukrainian and Russian.
 
 ---
 
-## 7. Translations and the parallel corpus
+## 8. Translations and the parallel corpus
 
-This is the package's distinguishing feature and the strongest argument for
-Estonia in the wider lexverse project.
+The package's distinguishing feature, and the strongest argument for Estonia
+in the wider lexverse project.
 
-**Structure is aligned across languages.** For the Constitution, Estonian and
-English both contain 168 `paragrahv`, 102 `alampunkt`, 15 `peatykk` and 10
-`muutmismarge`, and the `paragrahvNr` vectors are **identical**. Sections can
-therefore be joined on the number rather than on position.
+### The /en/ route
+
+Translations were thought broken for a month: `/akt/{translationId}/xml`
+returns HTTP 500 with an empty body, and the metadata endpoint failed the
+same way on several days. The Riigi Teataja explained the reason in October
+2026, and it is not a defect.
+
+Only the Estonian text has legal force in domestic proceedings. Estonian is
+the state language; translations are kept current but are not usable as
+official texts. They are therefore held apart from the law in force, and
+reached by inserting `/en/` into the path:
+
+```
+/public-api/api/v1/akt/111042025003/xml        Estonian
+/public-api/api/v1/en/akt/523042025002/xml     translation
+```
+
+estilex routes automatically on the identifier. **No archive download is
+needed for translations** — before this was known, `etx_get_parallel()`
+required a gigabyte. It now takes two HTTP requests.
+
+### Structural alignment
+
+For the Constitution, Estonian and English both contain 168 `paragrahv`, 102
+`alampunkt`, 15 `peatykk` and 10 `muutmismarge`, and the `paragrahvNr`
+vectors are **identical**. Sections join on the number rather than on
+position.
 
 `loige` counts differ by one (324 against 323), in section 168 — presumably a
 closing provision formatted differently. **Alignment stops at section level**;
@@ -210,8 +259,10 @@ subsections of a section are concatenated. Aligning below section level would
 work in most documents and fail silently in others, which is the worst kind
 of defect in research use.
 
-**Versions are paired.** Riigi Teataja links each consolidated version to the
-translation matching it, not always to the latest:
+### Versions are paired
+
+The Riigi Teataja links each consolidated version to the translation matching
+it, not always to the latest:
 
 | Consolidation | Estonian | Translation |
 |---|---|---|
@@ -224,14 +275,14 @@ Two days apart in both cases. Note that the 2015 consolidation's
 contemporaneous, not anachronistic. `kehtivuse_algus` and
 `kehtivuse_algus_en` record which two versions were compared.
 
-Combined with `redaktsioonid` and archives reaching back to 2013, this makes
-**translation fidelity measurable as a time series**, not only at the present
-moment. This is exactly the class of research the lexverse project exists to
-enable, and no other source in the family supports it.
+This makes **translation fidelity measurable as a time series**, not only at
+the present moment. No other source in the lexverse family supports it.
 
-**Missing translations return Estonian rows with `text_en` missing**, not
-zero rows. Most Estonian acts have no English version — the archive holds
-around 6,400 against a far larger body of legislation — and in fidelity work
+### Missing translations
+
+`etx_get_parallel()` returns Estonian rows with `text_en` missing rather than
+zero rows. Most Estonian acts have no English version — the archives hold
+around 6,800 against a far larger body of legislation — and in fidelity work
 an absent translation is an observation rather than an error.
 
 **Whether a translation is current:** compare `kehtivuse_algus`, not
@@ -239,192 +290,186 @@ an absent translation is an observation rather than an error.
 translation is up to date. Translations carry no version information of their
 own, so this comparison is the only signal.
 
-A translation has no official legal force. Section 12 of the Riigi Teataja
-Act requires reproduced texts to cite the published version; every function
-returns `source_url` for that purpose, and `eli` alongside it.
+Section 12 of the Riigi Teataja Act requires reproduced texts to cite the
+published version; every function returns `source_url` for that purpose.
 
 ---
 
-## 8. Bulk archives
+## 9. Version history: deliberately not implemented
+
+`/akt/{grupiId}/redaktsioonid` works, returns the full list of consolidated
+versions with their validity dates, and would make point-in-time queries
+straightforward. It was planned as `etx_get_versions()`.
+
+**It is not implemented, and should not be.** Asked what parameters it
+supports, the Riigi Teataja replied that APIs built for special functions are
+meant for the user interface and carry no public support. A CRAN package
+resting on an explicitly unsupported endpoint will be archived when it
+breaks, and it will break without warning.
+
+The capability is not lost. Older versions have identifiers of their own, and
+`etx_get_doc()`, `etx_get_text()` and `etx_get_parallel()` all accept them —
+so a point-in-time comparison works whenever the identifier is known. Only
+*enumerating* versions is unavailable.
+
+Revisit if the endpoint is ever documented, or if a supported equivalent
+appears.
+
+---
+
+## 10. Bulk archives
 
 ```
 xml.2026.zip     39.7 GB     xml.2026.en.zip   1.01 GB
-xml.2025.zip      2.64 GB    xml.2025.en.zip   82 MB
+xml.2025.zip      2.64 GB    xml.2025.en.zip   ~70 MB
 xml.2024.zip    344 MB       xml.2024.en.zip   39 MB
 MD5SUMS, SHA1SUMS, SHA256SUMS, LOEMIND.txt
 ```
 
-Filenames are identifiers. This is the only route to an identifier list and
-the only dependable route to translations.
+Filenames are identifiers. Since the API has no search endpoint, this is the
+only route to a list of them.
 
-### Archive semantics — resolved
+### Archives are complementary, not snapshots
 
-The 2024 and 2026 English archives share **no identifiers at all**, which
-initially looked as though they were disjoint datasets. They are not.
+An earlier reading of this was wrong. The 2024 and 2026 English archives
+share no identifiers at all, which looked like each being a complete snapshot
+superseding the last. The Riigi Teataja corrected it: an annual folder holds
+the acts published that year **together with** acts published earlier that
+received a new meta version during it — because they were amended, or had an
+end of validity recorded. Download only 2026 and acts untouched since 2024
+are simply absent.
 
-Each archive holds, for each act, the version in force at that archive's
-point in time. Since a translation receives a new identifier whenever it is
-updated, the same act appears in both archives under different identifiers.
-Confirmed by group identifier: of twenty groups sampled from the 2024
-archive, ten appear in a 200-document sample of the 2026 archive, and
-`terviktekstiGrupiID` 100515 (State Fees Act) is present in both.
+Measured on the English archives: 81 + 340 + 6,409 = 6,830 documents, with
+**no overlap whatsoever**. Taking only the newest loses 421, or 6%.
 
-The 2026 English archive holds 6,391 files spanning 2013 to 2026, of which
-5,729 are dated 2024 or earlier — so it does carry history, not just the
-present.
+`year = "all"` is therefore the default. The session cache holds several
+archives per language, and `etx_list_documents()` combines them with an
+`archive_year` column.
 
-**Download only the most recent archive.** Earlier ones are useful only for
-studying how a translation changed.
+**Coverage begins in 2024.** The archives describe "everything published or
+amended since 2024", not the whole body of Estonian legislation. Acts still
+in force but unamended since then are absent, and must be retrieved by
+identifier through `etx_get_doc()`, which has no such limit.
 
-The Estonian 2026 archive is presumably inflated by the June migration
-touching every document. Not verified — nobody has downloaded 40 GB to check.
-
-### Storage and the environment variable
+### Storage
 
 Archives default to a temporary directory, so nothing is written permanently
 and no CRAN policy on user directories applies.
 
 Three problems follow from a gigabyte download, and all three are addressed:
 
-1. **Re-downloading every session.** `dest` names a directory to keep the
-   archive in; a subsequent call with the same `dest` reuses the file.
+1. **Re-downloading every session.** `dest` names a directory to keep them in;
+   a later call with the same `dest` reuses what is there.
 2. **Re-registering every session.** A package-local environment does not
    survive restarting R, nor `devtools::load_all()` during development. The
-   `ESTILEX_CORPUS_DIR` environment variable is checked automatically, so an
-   archive already in that directory is adopted without being asked:
-
-   ```
-   ESTILEX_CORPUS_DIR=~/riigiteataja
-   ```
-
-   Set it in `~/.Renviron` via `usethis::edit_r_environ()`. The newest year
-   present is chosen, matching the download default.
-3. **Downloading 40 GB by accident.** A HEAD request reports the size first.
-   Above 5 GB, interactive sessions ask for confirmation and non-interactive
-   ones abort unless `force = TRUE`.
+   `ESTILEX_CORPUS_DIR` environment variable is checked automatically, and
+   every year present is adopted — not just the newest, since the archives
+   are complementary.
+3. **Downloading 43 GB by accident.** A HEAD request reports the size of
+   everything about to be fetched, summed. Above 5 GB, interactive sessions
+   ask and non-interactive ones abort unless `force = TRUE`.
 
 `confirm_large_download()` takes `interactive()` as an argument rather than
 calling it, because testthat runs interactively in RStudio and the guard
 would otherwise prompt during the test run.
 
 **`etx_clear_corpus()` deletes archives held in the temporary directory.**
-Tests must not call it — a developer's real archive is likely to be there.
-The test suite saves and restores the cache instead.
+Tests must not call it — a developer's real archives are likely to be there.
+The suite saves and restores the cache instead, and no test ever downloads.
 
 ---
 
-## 9. ELI
+## 11. ELI: withdrawn, not missing
 
-ELI is **not** in the API. `globaalID` is the act identifier, and
-`/public-api/api/v1/eli/{id}` returns 404.
+ELI identifiers do not exist in the current Riigi Teataja. The previous
+scheme did not conform to the standard and was abandoned on 1 June 2026; the
+old non-standard URIs now redirect to the plain act address:
 
-But ELI URIs resolve on the website (`/eli/{id}`, `/en/eli/{id}/consolide`)
-and the page declares `prefix="eli: http://data.europa.eu/eli/ontology#"`, so
-the metadata exists as RDFa in the presentation layer. `estilex` therefore
-constructs the `eli` column from the identifier rather than retrieving it.
+```
+/en/eli/523042025002/consolide  ->  /en/akt/523042025002
+```
 
-This weakens, but does not remove, the original strategic case for doing
-Estonia before Lithuania. If ELI never reaches the API, `lexcore` rests on
-`eurlex` and `danlex` for its identifier model, and Lithuania becomes a more
+Reinstating a conforming implementation has not been a priority.
+
+estilex therefore offers **no `eli` column**. An earlier version constructed
+one from the identifier, which produced a working link that was not an ELI
+identifier — worse than offering none.
+
+**This removes the original strategic case for doing Estonia before
+Lithuania.** The plan was for Estonia to give `lexcore` a third independent
+ELI implementation alongside `eurlex` and `danlex`. It does not. `lexcore`
+rests on those two for its identifier model, and Lithuania is now a more
 useful next step than a fourth ELI implementation would have been.
 
-The parallel corpus is now the stronger argument for Estonia regardless.
-
----
-
-## 10. Function status
-
-### Implemented
-
-- [x] `etx_get_doc()` — JSON metadata
-- [x] `etx_get_text()` — rendered running text
-- [x] `etx_get_paragraphs()` — one row per subsection
-- [x] `etx_get_references()` — amendment history with scope
-- [x] `etx_get_translation()` — via `tolkeSeosId` and the archive
-- [x] `etx_get_parallel()` — section-aligned Estonian and English
-- [x] `etx_download_corpus()` — with size guard and `dest`
-- [x] `etx_list_documents()` — identifiers from the archive
-- [x] `etx_list_archives()` — what is published, without downloading
-- [x] `etx_corpus_status()`, `etx_clear_corpus()`
-
-184 tests, of which roughly 150 run offline against synthetic documents.
-
-### Deferred to release-time decision
-
-`etx_get_versions()`. `/akt/{grupiId}/redaktsioonid` works without parameters
-and returns the full version list, which would suffice. But
-`?kehtivus=koik` is accepted and the parameter vocabulary is unknown, and
-`/akt/{actId}/redaktsioonid` returns an empty list where the group identifier
-returns the full one.
-
-**Decision rule:** include it if Riigi Teataja has replied by the time the
-package is ready; otherwise ship without and add in the next version.
-Point-in-time queries are the most valuable feature after the parallel
-corpus and deserve to be built once, correctly.
-
-### Not planned for v1
-
-- `etx_get_docs()` — batch retrieval, as in `danlex`. Less pressing here
-  because the archive already provides bulk access.
-- Ukrainian and Russian translations, which appear in `viited` but have not
-  been investigated.
-
----
-
-## 11. Open questions
-
-1. Which endpoints are supported and stable. The question that matters most.
-2. `redaktsioonid` parameter vocabulary.
-3. What the 39.7 GB Estonian archive contains.
-4. Whether acts other than the Constitution carry multiple `marksona`
-   keywords. Only one was present there.
-5. The `liigitused` classification vocabulary (`SÜSTJAOT¤RIIGI¤PÕHI`). A
-   systematic subject index would be material no other lexverse source has.
-6. Whether the Angular front end exposes a search endpoint. Network traffic
-   showed `tulemus?tekstNumber=...` but the path was not reachable under
-   `/public-api/api/v1/`.
-7. Whether translation XML will become available from the API. There is a
-   test asserting it currently is not; if that test starts failing, the
-   defect has been fixed and `etx_get_parallel()` can stop going through the
-   archive.
+The parallel corpus is the stronger argument for Estonia regardless, and it
+is an argument the ELI plan did not anticipate.
 
 ---
 
 ## 12. CRAN pre-flight
 
 - [ ] README and pre-computed vignette (`.Rmd.orig` + `data-raw/precompute.R`)
-- [ ] The vignette must not download an archive during pre-computation on
-      every run — cache it or use the smallest year
-- [ ] Document `ESTILEX_CORPUS_DIR` prominently in both. Without it the first
-      impression of the package is a gigabyte download.
+- [ ] Both need rewriting: the drafts assumed translations came from the
+      archive, which is no longer true and made the first impression of the
+      package a gigabyte download
 - [ ] `urlchecker::url_check()`
 - [ ] `usethis::use_spell_check()` — Estonian vocabulary in `inst/WORDLIST`
       (*peatükk*, *paragrahv*, *lõige*, *muutmismärge*, *terviktekst*,
-      *Riigi Teataja*, *riigiteataja*)
+      *Riigi Teataja*, *riigiteataja*, *tõlge*)
 - [ ] `devtools::check(cran = TRUE)`, win-builder, R-hub v2
 - [ ] `cran-comments.md` — note that no example or test downloads an archive
 - [ ] Version to `0.1.0`, `NEWS.md`
 - [ ] Check `git remote -v` is SSH, not HTTPS. `use_github()` sets HTTPS and
       the global `insteadOf` rule does not apply to remotes already set.
 
-Per the lexverse release policy the first submission bar is high: ship
-product-level coverage rather than a thin wrapper.
+Submit after `danlex` is accepted. The two share an architecture — network
+client, `if (FALSE)` examples, pre-computed vignette, `status` columns — so a
+reviewer's objection to one would apply to the other, and it is better to
+hear it once.
 
 ---
 
-## 13. Lexverse notes
+## 13. Open questions
+
+Most of the original list was answered in October 2026. What remains:
+
+1. What the 39.7 GB Estonian archive contains. Presumably inflated by the
+   June migration giving every document a new meta version, but nobody has
+   downloaded 40 GB to check.
+2. Whether acts other than the Constitution carry multiple `marksona`
+   keywords. Only one was present there.
+3. The `liigitused` classification vocabulary (`SÜSTJAOT¤RIIGI¤PÕHI`). A
+   systematic subject index would be material no other lexverse source has,
+   and it is worth asking about directly.
+4. Whether the Angular front end exposes a search endpoint. Network traffic
+   showed `tulemus?tekstNumber=...` but the path was not reachable under
+   `/public-api/api/v1/`. Likely one of the unsupported interface APIs.
+5. Ukrainian and Russian translations, which appear in `viited` but have not
+   been investigated. If they follow the same pattern as English, a
+   three-language parallel corpus is possible.
+
+---
+
+## 14. Lexverse notes
 
 Two findings feed into `lexcore`:
 
 - **`lex_documents` needs a language axis, not just a document level.**
   Estonia is the first source in the family where the same provision exists
-  in two languages with a reliable join key. A standard modelling documents
-  as monolingual would lose that.
+  in two languages with a reliable join key, and where versions are paired
+  across languages. A standard modelling documents as monolingual would lose
+  that.
 - **Version identity is not document identity.** `grupiId` and `kehtivId` are
   distinct, and translations have their own group space again. Any
   cross-jurisdictional structure needs to distinguish "this act" from "this
   version of this act" — `danlex` hinted at it through consolidated texts,
   but Estonia makes it explicit.
+
+A third finding is about process rather than structure. Two of this package's
+hardest problems — the `/en/` route and the archive semantics — were resolved
+by writing to the publisher, not by more probing. Both had been mapped
+incorrectly with considerable effort first. For an undocumented API, the
+email is cheaper than the exploration.
 
 Sequence: **Denmark -> Estonia -> `lexcore` -> Lithuania -> (Norway + Iceland
 on a corpus adapter)**. Latvia excluded: re-use of `likumi.lv` is a chargeable

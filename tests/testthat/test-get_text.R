@@ -105,11 +105,11 @@ test_that("invalid identifiers are rejected", {
 })
 
 test_that("canonical URLs are constructed", {
+  # No ELI is offered: identifiers were withdrawn from the Riigi Teataja on
+  # 1 June 2026, and old /eli/ addresses redirect to the plain /akt/ form.
   u <- etx_urls("111042025003")
-  # ELI resolves on the website but is absent from the API, so it is built
-  # from the identifier rather than retrieved.
-  expect_equal(u$eli, "https://www.riigiteataja.ee/eli/111042025003")
-  expect_match(u$source_url, "/akt/111042025003$")
+  expect_equal(u$source_url, "https://www.riigiteataja.ee/akt/111042025003")
+  expect_null(u$eli)
 })
 
 # ---------------------------------------------------------------------------
@@ -258,11 +258,6 @@ test_that("the translation link works in both directions", {
   et <- etx_get_doc("111042025003")
   en <- etx_get_doc(et$tolke_seos_id)
 
-  # The translation endpoint returns HTTP 500 intermittently: the same
-  # identifier answered normally one day and failed the next. Reported to
-  # Riigi Teataja on 2026-09-01. Skip rather than fail — the defect is
-  # upstream, and the error path itself is tested separately below.
-  skip_if(en$status != "ok", "Translation endpoint returned HTTP 500")
 
   expect_true(en$is_translation)
   expect_equal(en$tolke_seos_id, "111042025003")
@@ -277,7 +272,6 @@ test_that("a translation is current when its validity date matches", {
   # by days even when the translation is up to date.
   et <- etx_get_doc("111042025003")
   en <- etx_get_doc(et$tolke_seos_id)
-  skip_if(en$status != "ok", "Translation endpoint returned HTTP 500")
 
   expect_equal(et$kehtivuse_algus, en$kehtivuse_algus)
 })
@@ -286,12 +280,13 @@ test_that("an unknown identifier is reported rather than raised", {
   skip_on_cran()
   skip_if_offline("riigiteataja.ee")
 
-  # The service returns 500 for identifiers that do not exist, and
-  # occasionally for valid ones, so it cannot be treated as fatal.
+  # The service has returned both 404 and 500 for identifiers that do not
+  # exist, at different times. Either is reported rather than raised, since a
+  # 500 cannot be told apart from a genuine outage.
   d <- etx_get_doc("999999999999")
-  expect_equal(d$status, "error")
-  expect_false(is.na(d$error_message))
+  expect_true(d$status %in% c("not_found", "error"))
   expect_true(is.na(d$pealkiri))
+  expect_equal(nrow(d), 1L)
 })
 
 # ---------------------------------------------------------------------------
@@ -342,17 +337,16 @@ test_that("sub-points are rendered inline and counted", {
   expect_gt(p$n_alampunkt[i], 1L)
 })
 
-test_that("translation XML is unavailable through the API", {
+test_that("translations parse like Estonian texts", {
   skip_on_cran()
   skip_if_offline("riigiteataja.ee")
 
-  # Reported to Riigi Teataja on 2026-09-01: /akt/{translationId}/xml returns
-  # 500 while the metadata endpoint for the same identifier works. If this
-  # test ever fails, the defect has been fixed and etx_get_parallel() can
-  # stop going through the bulk archive.
-  expect_warning(
-    p <- etx_get_paragraphs("523042025002"),
-    "500"
-  )
-  expect_equal(nrow(p), 0L)
+  # Translations were long thought broken: /akt/{translationId}/xml returns
+  # HTTP 500. They are simply on another route, /en/akt/{id}/xml, because
+  # they are unofficial texts held apart from the law in force.
+  p <- etx_get_paragraphs("523042025002")
+
+  expect_true(all(p$is_translation))
+  expect_equal(length(unique(p$paragrahv_nr)), 168L)
+  expect_false(anyNA(p$text))
 })

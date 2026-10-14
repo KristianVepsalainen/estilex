@@ -101,7 +101,10 @@ etx_parse_id <- function(id) {
 #' @noRd
 is_translation_id <- function(id) {
   id <- as_id(id)
-  !is.na(id) && substr(id, 1, 1) == ETX_ID_TRANSLATION
+  # The leading digit only carries meaning in the twelve-digit format. Older
+  # consolidated versions use short sequential numbers — 550572, 24304 — and
+  # one of those beginning with 5 is not a translation.
+  !is.na(id) && nchar(id) == 12L && substr(id, 1, 1) == ETX_ID_TRANSLATION
 }
 
 #' Build an API URL for a document

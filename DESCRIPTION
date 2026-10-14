@@ -7,7 +7,6 @@ Description: What the package does (one paragraph).
 License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
-RoxygenNote: 8.0.0
 URL: https://github.com/KristianVepsalainen/estilex
 BugReports: https://github.com/KristianVepsalainen/estilex/issues
 Suggests: 
@@ -19,3 +18,4 @@ Imports:
     rlang,
     tibble,
     xml2
+Config/roxygen2/version: 8.1.0

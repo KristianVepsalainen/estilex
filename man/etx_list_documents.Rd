@@ -2,7 +2,7 @@
 % Please edit documentation in R/corpus.R
 \name{etx_list_documents}
 \alias{etx_list_documents}
-\title{List the documents in a downloaded archive}
+\title{List the documents in the downloaded archives}
 \usage{
 etx_list_documents(lang = c("en", "et"))
 }
@@ -11,11 +11,12 @@ etx_list_documents(lang = c("en", "et"))
 }
 \value{
 A \link[tibble:tibble]{tibble} with one row per document:
-\code{id}, \code{is_translation}, \code{day}, \code{month}, \code{year}, \code{sequence}, \code{file}.
+\code{id}, \code{is_translation}, \code{day}, \code{month}, \code{year}, \code{sequence},
+\code{archive_year}, \code{file}.
 }
 \description{
-Returns every identifier the archive contains, with its components decoded
-from the identifier itself. The archive must have been downloaded first
+Returns every identifier the archives contain, with its components decoded
+from the identifier itself. The archives must have been downloaded first
 with \code{\link[=etx_download_corpus]{etx_download_corpus()}}.
 }
 \section{What the identifiers tell you}{
@@ -23,8 +24,12 @@ with \code{\link[=etx_download_corpus]{etx_download_corpus()}}.
 
 Identifiers encode the language, the publication date of that particular
 version, and a sequence number, so a useful amount can be learned without
-opening a single document. Note that \code{year} is the year that \emph{version} was
-published, which for a translation is the year it was last revised.
+opening a single document. \code{year} is the year that \emph{version} was published,
+which for a translation is the year it was last revised, and is not the
+same as \code{archive_year}, the archive it was found in.
+
+An act amended several times appears several times, once per version, under
+different identifiers.
 }
 
 \examples{
@@ -34,6 +39,7 @@ if (FALSE) {
 
   nrow(idx)
   table(idx$year)
+  table(idx$archive_year)
 }
 
 }

@@ -27,7 +27,7 @@ the temporal context survives a join.}
 Teataja Act.}
 }
 
-Zero rows, with a warning, if the Estonian act cannot be retrieved.
+Zero rows if the Estonian act cannot be retrieved.
 }
 \description{
 Returns one row per section, with the Estonian and English texts side by
@@ -56,18 +56,16 @@ corresponds to it, rather than always to the latest. A consolidation from
 comparing an older version of an act against its translation gives a
 contemporaneous result rather than an anachronistic one.
 
-Combined with the version list from the API and an archive reaching back to
-2013, this makes translation fidelity measurable over time rather than only
-at the present moment. \code{kehtivuse_algus} and \code{kehtivuse_algus_en} record
-which two versions were compared.
+\code{kehtivuse_algus} and \code{kehtivuse_algus_en} record which two versions were
+compared, which makes translation fidelity measurable over time rather than
+only at the present moment.
 }
 
 \section{Missing translations}{
 
 
-Most Estonian acts have no English translation: the archive holds a few
-thousand, against a far larger body of legislation. When a translation is
-absent, the Estonian rows are still returned with \code{text_en} missing, and
+Most Estonian acts have no English translation. When one is absent, the
+Estonian rows are still returned with \code{text_en} missing, and
 \code{has_translation} is \code{FALSE}. The same applies to individual sections that
 appear in one language and not the other.
 
@@ -78,7 +76,6 @@ act is what makes the gap measurable.
 
 \examples{
 if (FALSE) {
-  etx_download_corpus("en")
   par <- etx_get_parallel("111042025003")
 
   # Sections whose translation is much shorter than the original
@@ -90,6 +87,5 @@ if (FALSE) {
 
 }
 \seealso{
-\code{\link[=etx_get_translation]{etx_get_translation()}}, \code{\link[=etx_get_paragraphs]{etx_get_paragraphs()}},
-\code{\link[=etx_download_corpus]{etx_download_corpus()}}
+\code{\link[=etx_get_translation]{etx_get_translation()}}, \code{\link[=etx_get_paragraphs]{etx_get_paragraphs()}}
 }

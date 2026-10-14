@@ -8,7 +8,7 @@ etx_corpus_status()
 }
 \value{
 A \link[tibble:tibble]{tibble} with one row per language:
-\code{lang}, \code{available}, \code{year}, \code{path}, \code{size_mb}, \code{n_documents},
+\code{lang}, \code{available}, \code{years}, \code{n_archives}, \code{size_mb}, \code{n_documents},
 \code{is_temporary}.
 }
 \description{

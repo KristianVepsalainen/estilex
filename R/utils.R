@@ -91,22 +91,58 @@ etx_parse_id <- function(id) {
   )
 }
 
-#' Canonical URLs for a document
+#' Is this identifier a translation?
+#'
+#' The leading digit decides: 1 for an Estonian text, 5 for a translation.
+#' Translations are unofficial — only the Estonian text has legal force in
+#' domestic proceedings — and the service keeps them on a separate route
+#' accordingly.
+#'
+#' @noRd
+is_translation_id <- function(id) {
+  id <- as_id(id)
+  !is.na(id) && substr(id, 1, 1) == ETX_ID_TRANSLATION
+}
+
+#' Build an API URL for a document
+#'
+#' Translations live under an /en/ path segment:
+#'
+#'   /public-api/api/v1/akt/111042025003/xml        Estonian
+#'   /public-api/api/v1/en/akt/523042025002/xml     translation
+#'
+#' Requesting a translation on the Estonian route returns HTTP 500 with an
+#' empty body, which is what made translations look broken until the Riigi
+#' Teataja explained the split in October 2026. The separation is deliberate:
+#' translations are not official texts for domestic legal purposes, so they
+#' are held apart from the law in force.
+#'
+#' @noRd
+etx_api_url <- function(id, suffix = NULL) {
+  prefix <- if (is_translation_id(id)) "en/" else ""
+  paste0(
+    ETX_BASE, "/", prefix, "akt/", as_id(id),
+    if (!is.null(suffix)) paste0("/", suffix) else ""
+  )
+}
+
+#' Canonical web address for a document
 #'
 #' `source_url` exists to satisfy section 12 of the Riigi Teataja Act, which
 #' requires texts reproduced elsewhere to cite the version published in the
-#' Riigi Teataja. Every function that returns document content returns this
-#' alongside it.
+#' Riigi Teataja. Every function that returns document content returns it.
 #'
-#' The ELI URI resolves on the website but is not exposed through the API, so
-#' it is constructed rather than retrieved.
+#' No ELI URI is offered. ELI identifiers were withdrawn from the Riigi
+#' Teataja on 1 June 2026 — the previous scheme did not conform to the
+#' standard, and reinstating a conforming one has not been a priority. Old
+#' /eli/ addresses now redirect to the plain /akt/ form, so constructing one
+#' would yield a working link that is not an ELI identifier, which is worse
+#' than offering none.
 #'
 #' @noRd
 etx_urls <- function(id) {
-  list(
-    source_url = paste0(ETX_SITE, "/akt/", id),
-    eli        = paste0(ETX_SITE, "/eli/", id)
-  )
+  prefix <- if (is_translation_id(id)) "/en" else ""
+  list(source_url = paste0(ETX_SITE, prefix, "/akt/", as_id(id)))
 }
 
 # ---------------------------------------------------------------------------
@@ -191,7 +227,7 @@ etx_perform <- function(url) {
 #' Retrieve JSON metadata for a document
 #' @noRd
 etx_get_json <- function(id) {
-  res <- etx_perform(paste0(ETX_BASE, "/akt/", id))
+  res <- etx_perform(etx_api_url(id))
   if (!identical(res$status, "ok")) return(res)
 
   body <- tryCatch(
@@ -215,7 +251,7 @@ etx_get_json <- function(id) {
 #'
 #' @noRd
 etx_get_xml <- function(id) {
-  res <- etx_perform(paste0(ETX_BASE, "/akt/", id, "/xml"))
+  res <- etx_perform(etx_api_url(id, "xml"))
   if (!identical(res$status, "ok")) return(res)
 
   doc <- tryCatch(

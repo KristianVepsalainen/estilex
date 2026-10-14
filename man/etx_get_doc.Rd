@@ -36,7 +36,6 @@ separated.}
 editions, court analyses and translations into other languages —
 not cross-references to other acts, which
 \code{\link[=etx_get_references]{etx_get_references()}} returns.}
-\item{\code{source_url}, \code{eli}}{Canonical links, as above.}
 \item{\code{error_message}}{Explanation when \code{status} is \code{"error"}.}
 }
 }
@@ -78,13 +77,6 @@ giving up. A clean 404 is reported as \code{"not_found"}.
 
 \section{Attribution}{
 
-
-Section 12 of the Riigi Teataja Act requires that texts reproduced
-elsewhere cite the version published in the Riigi Teataja. Every row
-carries \code{source_url} for that purpose. \code{eli} gives the European
-Legislation Identifier form of the same document; it resolves on the
-website, though it is not exposed through the API and is therefore
-constructed from the identifier.
 }
 
 \examples{

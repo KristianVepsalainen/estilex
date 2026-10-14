@@ -34,12 +34,6 @@
 #'
 #' @section Attribution:
 #'
-#' Section 12 of the Riigi Teataja Act requires that texts reproduced
-#' elsewhere cite the version published in the Riigi Teataja. Every row
-#' carries `source_url` for that purpose. `eli` gives the European
-#' Legislation Identifier form of the same document; it resolves on the
-#' website, though it is not exposed through the API and is therefore
-#' constructed from the identifier.
 #'
 #' @param id A Riigi Teataja act identifier.
 #'
@@ -66,7 +60,6 @@
 #'       editions, court analyses and translations into other languages —
 #'       not cross-references to other acts, which
 #'       [etx_get_references()] returns.}
-#'     \item{`source_url`, `eli`}{Canonical links, as above.}
 #'     \item{`error_message`}{Explanation when `status` is `"error"`.}
 #'   }
 #'
@@ -132,7 +125,6 @@ etx_doc_row <- function(id, status, values = list()) {
     liigitused         = NA_character_,
     n_viited           = NA_integer_,
     source_url         = urls$source_url,
-    eli                = urls$eli,
     error_message      = NA_character_
   )
 

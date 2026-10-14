@@ -2,7 +2,7 @@
 % Please edit documentation in R/corpus.R
 \name{etx_download_corpus}
 \alias{etx_download_corpus}
-\title{Download the Riigi Teataja bulk archive}
+\title{Download the Riigi Teataja bulk archives}
 \source{
 Riigi Teataja open data,
 \url{https://www.riigiteataja.ee/avaandmed/ERT/}.
@@ -10,7 +10,7 @@ Riigi Teataja open data,
 \usage{
 etx_download_corpus(
   lang = c("en", "et"),
-  year = NULL,
+  year = "all",
   dest = NULL,
   refresh = FALSE,
   force = FALSE,
@@ -20,77 +20,86 @@ etx_download_corpus(
 \arguments{
 \item{lang}{\code{"en"} for English translations or \code{"et"} for Estonian texts.}
 
-\item{year}{Archive year. Defaults to the most recent available.}
+\item{year}{\code{"all"} for every published archive, or one or more years.}
 
-\item{dest}{Directory to store the archive in. Defaults to a temporary
-directory that is discarded when the session ends.}
+\item{dest}{Directory to store archives in. Defaults to
+\code{ESTILEX_CORPUS_DIR} if set, otherwise a temporary directory.}
 
-\item{refresh}{Download again even if the archive is already present.}
+\item{refresh}{Download again even if an archive is already present.}
 
 \item{force}{Proceed with a very large download without confirmation.}
 
-\item{progress}{Show download progress. Defaults to \code{\link[=interactive]{interactive()}}.}
+\item{progress}{Show progress. Defaults to \code{\link[=interactive]{interactive()}}.}
 }
 \value{
-Invisibly, the path to the archive file.
+Invisibly, a character vector of archive paths.
 }
 \description{
 The API has no search or enumeration endpoint, so the only way to obtain a
-list of identifiers — and the only reliable route to English translations —
-is the bulk archive of XML documents.
+list of identifiers is the open data archive of XML documents.
 }
-\section{Which archive to download}{
+\section{Archives are complementary, not redundant}{
 
 
-Archives are published per year, in Estonian and in English. They are
-\strong{complete snapshots}, not that year's documents: the 2024 and 2026
-English archives share no identifiers at all, because a translation
-receives a new identifier whenever it is updated. Download the most recent
-archive; earlier ones are only useful for studying how documents changed.
+Each annual archive holds the acts published in that year \strong{together with}
+acts published earlier that received a new meta version during it — because
+they were amended, or had an end of validity recorded. An act published in
+2023 and untouched since will therefore appear in the 2023 archive and in
+no later one.
 
-Sizes differ enormously. The English archive is around 1 GB; the Estonian
-one for 2026 is over 40 GB, apparently because the June 2026 system
-migration touched every document. Downloading it is guarded: in an
-interactive session you are asked to confirm, and otherwise \code{force = TRUE}
-is required.
+Downloading only the newest archive leaves gaps. \code{year = "all"}, the
+default, fetches every published archive and is the only way to get
+complete coverage of the period they span.
+
+Note what that period is: archives begin in 2024, so the corpus they
+describe is "everything published or amended since 2024", not the whole
+body of Estonian legislation. Older acts still in force but unamended since
+then are absent. For those, retrieve documents by identifier through
+\code{\link[=etx_get_doc]{etx_get_doc()}}, which has no such limit.
 }
 
-\section{Where it is stored}{
+\section{Sizes}{
 
 
-By default the archive goes to a temporary directory and is kept for the
-rest of the session, so nothing is written to your file system
-permanently. Since re-downloading a gigabyte in every session is
-unpleasant, \code{dest} lets you keep it somewhere of your choosing:
+The English archives total around a gigabyte; the Estonian ones exceed
+forty, since the June 2026 system migration gave every document a new meta
+version. The combined size is checked before anything is fetched: above
+5 GB an interactive session asks for confirmation, and a non-interactive
+one stops unless \code{force = TRUE}.
+}
 
-\if{html}{\out{<div class="sourceCode">}}\preformatted{etx_download_corpus(dest = "~/riigiteataja")
-}\if{html}{\out{</div>}}
+\section{Where archives are stored}{
 
-A path given in \code{dest} is used again on subsequent calls without
-re-downloading, unless \code{refresh = TRUE}.
 
-Better still, set the \code{ESTILEX_CORPUS_DIR} environment variable once, in
-\verb{~/.Renviron}:
+By default they go to a temporary directory and last only for the session,
+so nothing is written to your file system permanently. Since re-downloading
+is unpleasant, \code{dest} keeps them somewhere of your choosing, and a later
+call with the same \code{dest} reuses what is already there.
+
+Better still, set \code{ESTILEX_CORPUS_DIR} once in \verb{~/.Renviron}
+(\code{usethis::edit_r_environ()} opens the file):
 
 \if{html}{\out{<div class="sourceCode">}}\preformatted{ESTILEX_CORPUS_DIR=~/riigiteataja
 }\if{html}{\out{</div>}}
 
-estilex then picks up an archive already in that directory without being
-asked, so \code{\link[=etx_list_documents]{etx_list_documents()}} and \code{\link[=etx_get_parallel]{etx_get_parallel()}} work immediately
-in a new session. \code{usethis::edit_r_environ()} opens the file.
+estilex then picks up archives already in that directory without being
+asked, so \code{\link[=etx_list_documents]{etx_list_documents()}} works immediately in a new session.
 }
 
 \examples{
 if (FALSE) {
-  # English translations, most recent archive (~1 GB)
+  # Every English archive, for complete coverage (~1 GB)
   etx_download_corpus("en")
 
-  # Keep it between sessions
+  # A single year, if you only want to try things out
+  etx_download_corpus("en", year = 2024)
+
+  # Keep them between sessions
   etx_download_corpus("en", dest = "~/riigiteataja")
 }
 
 }
 \seealso{
-\code{\link[=etx_list_documents]{etx_list_documents()}} for the identifiers it contains,
-\code{\link[=etx_corpus_status]{etx_corpus_status()}}, \code{\link[=etx_clear_corpus]{etx_clear_corpus()}}, \code{\link[=etx_list_archives]{etx_list_archives()}}
+\code{\link[=etx_list_documents]{etx_list_documents()}}, \code{\link[=etx_corpus_status]{etx_corpus_status()}},
+\code{\link[=etx_clear_corpus]{etx_clear_corpus()}}, \code{\link[=etx_list_archives]{etx_list_archives()}}
 }

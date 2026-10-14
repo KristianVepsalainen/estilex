@@ -18,24 +18,21 @@ A one-row \link[tibble:tibble]{tibble} with \code{status}, \code{id},
 \code{kehtivuse_algus_en}, \code{is_current}, \code{text}, \code{n_char}, \code{source_url},
 \code{source_url_en} and \code{error_message}.
 
-\code{status} is \code{"ok"}, \code{"no_translation"} when the act has none,
-\code{"not_in_archive"} when the link exists but the document is not in the
-downloaded archive, \code{"not_found"} or \code{"error"}.
+\code{status} is \code{"ok"}, \code{"no_translation"} when the act has none, or
+\code{"not_found"} or \code{"error"} when retrieval failed.
 }
 \description{
 Follows the translation link recorded in the act's metadata and returns the
-translation from the downloaded bulk archive.
+translation.
 }
-\section{Why the archive rather than the API}{
+\section{Unofficial translations}{
 
 
-Translation XML is not reliably available from the API. Requesting
-\verb{/akt/\{translationId\}/xml} returns HTTP 500, and the metadata endpoint for
-translation identifiers has failed intermittently as well — the same
-identifier answered normally on one day and failed on the next two. This
-was reported to Riigi Teataja in September 2026. Until it is fixed, the
-bulk archive is the only dependable route, so \code{\link[=etx_download_corpus]{etx_download_corpus()}} must
-be called first.
+Only the Estonian text has legal force in domestic proceedings. English
+translations are kept up to date but are not official texts, so the Riigi
+Teataja holds them apart from the law in force, on a separate \verb{/en/} route.
+estilex follows that route automatically — identifiers beginning with 5 are
+translations — so no archive download is needed.
 }
 
 \section{Whether a translation is current}{
@@ -47,14 +44,12 @@ dates. \code{is_current} does that, comparing \code{kehtivuse_algus} on both sid
 Publication dates are not a useful signal: they commonly differ by days
 even when the translation is up to date.
 
-A translation has no official legal force. Section 12 of the Riigi Teataja
-Act requires reproduced texts to cite the published version, and
-\code{source_url} is provided for that purpose.
+Section 12 of the Riigi Teataja Act requires reproduced texts to cite the
+published version, and \code{source_url} is provided for that purpose.
 }
 
 \examples{
 if (FALSE) {
-  etx_download_corpus("en")
   tr <- etx_get_translation("111042025003")
   tr$is_current
   cat(substr(tr$text, 1, 400))
@@ -62,6 +57,5 @@ if (FALSE) {
 
 }
 \seealso{
-\code{\link[=etx_get_parallel]{etx_get_parallel()}} for section-by-section alignment,
-\code{\link[=etx_download_corpus]{etx_download_corpus()}}
+\code{\link[=etx_get_parallel]{etx_get_parallel()}} for section-by-section alignment
 }

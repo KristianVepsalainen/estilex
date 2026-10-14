@@ -1,145 +1,138 @@
-#' Download the Riigi Teataja bulk archive
+#' Download the Riigi Teataja bulk archives
 #'
 #' The API has no search or enumeration endpoint, so the only way to obtain a
-#' list of identifiers — and the only reliable route to English translations —
-#' is the bulk archive of XML documents.
+#' list of identifiers is the open data archive of XML documents.
 #'
-#' @section Which archive to download:
+#' @section Archives are complementary, not redundant:
 #'
-#' Archives are published per year, in Estonian and in English. They are
-#' **complete snapshots**, not that year's documents: the 2024 and 2026
-#' English archives share no identifiers at all, because a translation
-#' receives a new identifier whenever it is updated. Download the most recent
-#' archive; earlier ones are only useful for studying how documents changed.
+#' Each annual archive holds the acts published in that year **together with**
+#' acts published earlier that received a new meta version during it — because
+#' they were amended, or had an end of validity recorded. An act published in
+#' 2023 and untouched since will therefore appear in the 2023 archive and in
+#' no later one.
 #'
-#' Sizes differ enormously. The English archive is around 1 GB; the Estonian
-#' one for 2026 is over 40 GB, apparently because the June 2026 system
-#' migration touched every document. Downloading it is guarded: in an
-#' interactive session you are asked to confirm, and otherwise `force = TRUE`
-#' is required.
+#' Downloading only the newest archive leaves gaps. `year = "all"`, the
+#' default, fetches every published archive and is the only way to get
+#' complete coverage of the period they span.
 #'
-#' @section Where it is stored:
+#' Note what that period is: archives begin in 2024, so the corpus they
+#' describe is "everything published or amended since 2024", not the whole
+#' body of Estonian legislation. Older acts still in force but unamended since
+#' then are absent. For those, retrieve documents by identifier through
+#' [etx_get_doc()], which has no such limit.
 #'
-#' By default the archive goes to a temporary directory and is kept for the
-#' rest of the session, so nothing is written to your file system
-#' permanently. Since re-downloading a gigabyte in every session is
-#' unpleasant, `dest` lets you keep it somewhere of your choosing:
+#' @section Sizes:
 #'
-#' ```
-#' etx_download_corpus(dest = "~/riigiteataja")
-#' ```
+#' The English archives total around a gigabyte; the Estonian ones exceed
+#' forty, since the June 2026 system migration gave every document a new meta
+#' version. The combined size is checked before anything is fetched: above
+#' 5 GB an interactive session asks for confirmation, and a non-interactive
+#' one stops unless `force = TRUE`.
 #'
-#' A path given in `dest` is used again on subsequent calls without
-#' re-downloading, unless `refresh = TRUE`.
+#' @section Where archives are stored:
 #'
-#' Better still, set the `ESTILEX_CORPUS_DIR` environment variable once, in
-#' `~/.Renviron`:
+#' By default they go to a temporary directory and last only for the session,
+#' so nothing is written to your file system permanently. Since re-downloading
+#' is unpleasant, `dest` keeps them somewhere of your choosing, and a later
+#' call with the same `dest` reuses what is already there.
+#'
+#' Better still, set `ESTILEX_CORPUS_DIR` once in `~/.Renviron`
+#' (`usethis::edit_r_environ()` opens the file):
 #'
 #' ```
 #' ESTILEX_CORPUS_DIR=~/riigiteataja
 #' ```
 #'
-#' estilex then picks up an archive already in that directory without being
-#' asked, so [etx_list_documents()] and [etx_get_parallel()] work immediately
-#' in a new session. `usethis::edit_r_environ()` opens the file.
+#' estilex then picks up archives already in that directory without being
+#' asked, so [etx_list_documents()] works immediately in a new session.
 #'
 #' @param lang `"en"` for English translations or `"et"` for Estonian texts.
-#' @param year Archive year. Defaults to the most recent available.
-#' @param dest Directory to store the archive in. Defaults to a temporary
-#'   directory that is discarded when the session ends.
-#' @param refresh Download again even if the archive is already present.
+#' @param year `"all"` for every published archive, or one or more years.
+#' @param dest Directory to store archives in. Defaults to
+#'   `ESTILEX_CORPUS_DIR` if set, otherwise a temporary directory.
+#' @param refresh Download again even if an archive is already present.
 #' @param force Proceed with a very large download without confirmation.
-#' @param progress Show download progress. Defaults to [interactive()].
+#' @param progress Show progress. Defaults to [interactive()].
 #'
-#' @return Invisibly, the path to the archive file.
+#' @return Invisibly, a character vector of archive paths.
 #'
-#' @seealso [etx_list_documents()] for the identifiers it contains,
-#'   [etx_corpus_status()], [etx_clear_corpus()], [etx_list_archives()]
+#' @seealso [etx_list_documents()], [etx_corpus_status()],
+#'   [etx_clear_corpus()], [etx_list_archives()]
 #'
 #' @source Riigi Teataja open data,
 #'   <https://www.riigiteataja.ee/avaandmed/ERT/>.
 #'
 #' @examples
 #' if (FALSE) {
-#'   # English translations, most recent archive (~1 GB)
+#'   # Every English archive, for complete coverage (~1 GB)
 #'   etx_download_corpus("en")
 #'
-#'   # Keep it between sessions
+#'   # A single year, if you only want to try things out
+#'   etx_download_corpus("en", year = 2024)
+#'
+#'   # Keep them between sessions
 #'   etx_download_corpus("en", dest = "~/riigiteataja")
 #' }
 #'
 #' @export
-etx_download_corpus <- function(lang = c("en", "et"), year = NULL,
+etx_download_corpus <- function(lang = c("en", "et"), year = "all",
                                 dest = NULL, refresh = FALSE, force = FALSE,
                                 progress = interactive()) {
 
-  lang <- match.arg(lang)
-  year <- resolve_archive_year(lang, year)
-  name <- archive_name(lang, year)
-  url  <- paste0(ETX_BULK, "/", name)
+  lang  <- match.arg(lang)
+  years <- resolve_archive_years(lang, year)
 
   dir <- resolve_archive_dir(dest)
   if (!dir.exists(dir)) dir.create(dir, recursive = TRUE)
-  path <- file.path(dir, name)
 
-  if (file.exists(path) && !refresh) {
-    if (isTRUE(progress)) {
-      message("Using the archive already at ", path, ".")
+  names <- vapply(years, archive_name, character(1), lang = lang)
+  paths <- file.path(dir, names)
+  urls  <- paste0(ETX_BULK, "/", names)
+
+  needed <- refresh | !file.exists(paths)
+
+  if (any(needed)) {
+    # Size is checked across everything about to be fetched, not file by file:
+    # three Estonian archives are individually large and collectively enormous.
+    total <- sum(vapply(urls[needed], archive_size, numeric(1)), na.rm = TRUE)
+    confirm_large_download(total, paste(names[needed], collapse = ", "),
+                           force = force)
+  }
+
+  for (i in seq_along(years)) {
+    if (!needed[i]) {
+      if (isTRUE(progress)) message("Using the archive already at ", paths[i], ".")
+      next
     }
-    register_archive(lang, year, path)
-    return(invisible(path))
+    download_one_archive(urls[i], paths[i], names[i], progress)
   }
 
-  size <- archive_size(url)
-  confirm_large_download(size, name, force, progress)
-
-  if (isTRUE(progress)) {
-    message("Downloading ", name,
-            if (!is.na(size)) paste0(" (", format_bytes(size), ")") else "",
-            " to ", dir, ".")
-  }
-
-  req <- etx_request(url)
-  if (isTRUE(progress)) req <- httr2::req_progress(req)
-
-  resp <- tryCatch(
-    httr2::req_perform(req, path = path),
-    error = function(e) {
-      etx_abort("Could not download the archive.",
-                conditionMessage(e), class = "estilex_connection_error")
-    }
-  )
-
-  if (httr2::resp_status(resp) != 200L) {
-    unlink(path)
-    etx_abort(
-      paste0("Could not download ", name, "."),
-      paste0("Server returned HTTP ", httr2::resp_status(resp), "."),
-      class = "estilex_http_error"
-    )
-  }
-
-  register_archive(lang, year, path)
-  invisible(path)
+  register_archives(lang, years, paths)
+  invisible(paths)
 }
 
-#' List the documents in a downloaded archive
+#' List the documents in the downloaded archives
 #'
-#' Returns every identifier the archive contains, with its components decoded
-#' from the identifier itself. The archive must have been downloaded first
+#' Returns every identifier the archives contain, with its components decoded
+#' from the identifier itself. The archives must have been downloaded first
 #' with [etx_download_corpus()].
 #'
 #' @section What the identifiers tell you:
 #'
 #' Identifiers encode the language, the publication date of that particular
 #' version, and a sequence number, so a useful amount can be learned without
-#' opening a single document. Note that `year` is the year that *version* was
-#' published, which for a translation is the year it was last revised.
+#' opening a single document. `year` is the year that *version* was published,
+#' which for a translation is the year it was last revised, and is not the
+#' same as `archive_year`, the archive it was found in.
+#'
+#' An act amended several times appears several times, once per version, under
+#' different identifiers.
 #'
 #' @param lang `"en"` or `"et"`.
 #'
 #' @return A [tibble][tibble::tibble] with one row per document:
-#'   `id`, `is_translation`, `day`, `month`, `year`, `sequence`, `file`.
+#'   `id`, `is_translation`, `day`, `month`, `year`, `sequence`,
+#'   `archive_year`, `file`.
 #'
 #' @seealso [etx_download_corpus()]
 #'
@@ -150,12 +143,13 @@ etx_download_corpus <- function(lang = c("en", "et"), year = NULL,
 #'
 #'   nrow(idx)
 #'   table(idx$year)
+#'   table(idx$archive_year)
 #' }
 #'
 #' @export
 etx_list_documents <- function(lang = c("en", "et")) {
 
-  lang <- match.arg(lang)
+  lang  <- match.arg(lang)
   entry <- archive_entry(lang)
 
   if (is.null(entry)) {
@@ -168,26 +162,17 @@ etx_list_documents <- function(lang = c("en", "et")) {
 
   if (!is.null(entry$index)) return(entry$index)
 
-  files <- tryCatch(
-    utils::unzip(entry$path, list = TRUE),
-    error = function(e) {
-      etx_abort("Could not read the archive.",
-                conditionMessage(e), class = "estilex_parse_error")
-    }
-  )
+  parts <- lapply(names(entry$archives), function(y) {
+    index_one_archive(entry$archives[[y]], as.integer(y))
+  })
 
-  ids    <- sub("\\.xml$", "", basename(files$Name))
-  parsed <- lapply(ids, etx_parse_id)
+  index <- do.call(rbind, parts)
 
-  index <- tibble::tibble(
-    id             = ids,
-    is_translation = vapply(parsed, function(p) p$is_translation, logical(1)),
-    day            = vapply(parsed, function(p) p$day, integer(1)),
-    month          = vapply(parsed, function(p) p$month, integer(1)),
-    year           = vapply(parsed, function(p) p$year, integer(1)),
-    sequence       = vapply(parsed, function(p) p$sequence, integer(1)),
-    file           = files$Name
-  )
+  # The same identifier should not occur twice, since each archive holds a
+  # different version of an act. Guard anyway, keeping the newest sighting.
+  index <- index[order(index$id, -index$archive_year), , drop = FALSE]
+  index <- index[!duplicated(index$id), , drop = FALSE]
+  index <- index[order(index$id), , drop = FALSE]
 
   entry$index <- index
   assign(lang, entry, envir = .etx_cache)
@@ -198,7 +183,7 @@ etx_list_documents <- function(lang = c("en", "et")) {
 #' Report on the archives held in this session
 #'
 #' @return A [tibble][tibble::tibble] with one row per language:
-#'   `lang`, `available`, `year`, `path`, `size_mb`, `n_documents`,
+#'   `lang`, `available`, `years`, `n_archives`, `size_mb`, `n_documents`,
 #'   `is_temporary`.
 #'
 #' @seealso [etx_download_corpus()]
@@ -212,19 +197,20 @@ etx_corpus_status <- function() {
     e <- archive_entry(lang)
     if (is.null(e)) {
       return(tibble::tibble(
-        lang = lang, available = FALSE, year = NA_integer_,
-        path = NA_character_, size_mb = NA_real_,
+        lang = lang, available = FALSE, years = NA_character_,
+        n_archives = NA_integer_, size_mb = NA_real_,
         n_documents = NA_integer_, is_temporary = NA
       ))
     }
+    paths <- unlist(e$archives, use.names = FALSE)
     tibble::tibble(
       lang         = lang,
       available    = TRUE,
-      year         = e$year,
-      path         = e$path,
-      size_mb      = round(file.size(e$path) / 1024^2, 1),
+      years        = paste(sort(names(e$archives)), collapse = ", "),
+      n_archives   = length(paths),
+      size_mb      = round(sum(file.size(paths)) / 1024^2, 1),
       n_documents  = if (is.null(e$index)) NA_integer_ else nrow(e$index),
-      is_temporary = startsWith(e$path, tempdir())
+      is_temporary = all(startsWith(paths, tempdir()))
     )
   })
   do.call(rbind, rows)
@@ -248,9 +234,10 @@ etx_clear_corpus <- function() {
   for (lang in c("en", "et")) {
     e <- archive_entry(lang)
     if (is.null(e)) next
-    if (startsWith(e$path, tempdir())) unlink(e$path)
+    paths <- unlist(e$archives, use.names = FALSE)
+    for (p in paths) if (startsWith(p, tempdir())) unlink(p)
     rm(list = lang, envir = .etx_cache)
-    n <- n + 1L
+    n <- n + length(paths)
   }
   invisible(n)
 }
@@ -279,8 +266,7 @@ etx_list_archives <- function() {
               class = "estilex_http_error")
   }
 
-  html <- httr2::resp_body_string(res$response)
-  parse_archive_listing(html)
+  parse_archive_listing(httr2::resp_body_string(res$response))
 }
 
 # ---------------------------------------------------------------------------
@@ -288,39 +274,48 @@ etx_list_archives <- function() {
 # ---------------------------------------------------------------------------
 
 # Session-scoped. Archives default to tempdir(), so nothing persists unless
-# the user asks for it with `dest` — no CRAN policy on user directories
-# applies and no consent prompt is needed for the default path.
+# the user asks for it with `dest` or ESTILEX_CORPUS_DIR — no CRAN policy on
+# user directories applies to the default path.
+#
+# Each language holds a list of archives keyed by year, plus a lazily built
+# index across all of them.
 .etx_cache <- new.env(parent = emptyenv())
 
-#' Find the archive for a language
+#' Find the archives for a language
 #'
-#' Looks in the session cache first, then at the directory named by the
-#' ESTILEX_CORPUS_DIR environment variable. The second path matters because a
-#' package-local environment does not survive restarting R, and re-registering
-#' a gigabyte archive by hand at the start of every session is exactly the
-#' friction that variable removes.
+#' Looks in the session cache first, then at ESTILEX_CORPUS_DIR. The second
+#' path matters because a package-local environment does not survive
+#' restarting R, and re-registering archives by hand at the start of every
+#' session is exactly the friction that variable removes.
 #'
 #' @noRd
 archive_entry <- function(lang) {
 
   if (exists(lang, envir = .etx_cache, inherits = FALSE)) {
     e <- get(lang, envir = .etx_cache)
-    # The file may have gone away between calls, e.g. a tempdir sweep.
-    if (file.exists(e$path)) return(e)
+    # Files may have gone away between calls, e.g. a tempdir sweep.
+    keep <- vapply(e$archives, file.exists, logical(1))
+    if (all(keep)) return(e)
+
     rm(list = lang, envir = .etx_cache)
+    if (any(keep)) {
+      e$archives <- e$archives[keep]
+      e$index    <- NULL
+      assign(lang, e, envir = .etx_cache)
+      return(e)
+    }
   }
 
-  adopt_configured_archive(lang)
+  adopt_configured_archives(lang)
 }
 
-#' Adopt an archive from ESTILEX_CORPUS_DIR, if one is there
+#' Adopt every archive in ESTILEX_CORPUS_DIR
 #'
-#' The most recent year present is chosen, matching the default behaviour of
-#' etx_download_corpus(). Returns NULL when the variable is unset or the
-#' directory holds no archive for this language.
+#' All years present are taken, not just the newest, because the archives are
+#' complementary rather than successive.
 #'
 #' @noRd
-adopt_configured_archive <- function(lang) {
+adopt_configured_archives <- function(lang) {
 
   dir <- Sys.getenv("ESTILEX_CORPUS_DIR", unset = "")
   if (!nzchar(dir)) return(NULL)
@@ -338,41 +333,23 @@ adopt_configured_archive <- function(lang) {
   if (length(found) == 0L) return(NULL)
 
   years <- as.integer(sub("^xml[.]([0-9]{4}).*$", "\\1", found))
-  pick  <- which.max(years)
-
-  register_archive(lang, years[pick], file.path(dir, found[pick]))
+  register_archives(lang, years, file.path(dir, found))
   get(lang, envir = .etx_cache)
 }
 
 #' @noRd
-register_archive <- function(lang, year, path) {
-  assign(lang, list(year = year, path = path, index = NULL), envir = .etx_cache)
-}
-
-#' Decide where an archive should live
-#'
-#' An explicit `dest` wins; otherwise ESTILEX_CORPUS_DIR if it is set; and
-#' failing that a temporary directory, which is discarded with the session and
-#' therefore needs no consent to write to.
-#'
-#' @noRd
-resolve_archive_dir <- function(dest = NULL) {
-  if (!is.null(dest)) {
-    return(normalizePath(path.expand(dest), mustWork = FALSE))
-  }
-  configured <- Sys.getenv("ESTILEX_CORPUS_DIR", unset = "")
-  if (nzchar(configured)) {
-    return(normalizePath(path.expand(configured), mustWork = FALSE))
-  }
-  file.path(tempdir(), "estilex")
+register_archives <- function(lang, years, paths) {
+  archives <- stats::setNames(as.list(paths), as.character(years))
+  archives <- archives[order(names(archives))]
+  assign(lang, list(archives = archives, index = NULL), envir = .etx_cache)
 }
 
 # ---------------------------------------------------------------------------
-# Archive naming and discovery
+# Archive naming, discovery and retrieval
 # ---------------------------------------------------------------------------
 
 #' @noRd
-archive_name <- function(lang, year) {
+archive_name <- function(year, lang) {
   if (identical(lang, "en")) {
     paste0("xml.", year, ".en.zip")
   } else {
@@ -387,8 +364,7 @@ archive_name <- function(lang, year) {
 #'
 #' @noRd
 parse_archive_listing <- function(html) {
-  m <- regmatches(html, gregexpr("xml\\.[0-9]{4}(\\.en)?\\.zip", html))[[1]]
-  m <- unique(m)
+  m <- unique(regmatches(html, gregexpr("xml\\.[0-9]{4}(\\.en)?\\.zip", html))[[1]])
 
   if (length(m) == 0L) {
     etx_abort(
@@ -406,28 +382,83 @@ parse_archive_listing <- function(html) {
   out[order(out$lang, -out$year), , drop = FALSE]
 }
 
-#' Choose the archive year, defaulting to the most recent published
+#' Decide which years to fetch
 #' @noRd
-resolve_archive_year <- function(lang, year = NULL) {
+resolve_archive_years <- function(lang, year = "all") {
 
-  if (!is.null(year)) {
-    year <- suppressWarnings(as.integer(year))
-    if (length(year) != 1L || is.na(year)) {
-      etx_abort("`year` must be a single four-digit year.",
-                class = "estilex_bad_argument")
+  if (identical(year, "all")) {
+    available <- etx_list_archives()
+    available <- available[available$lang == lang, , drop = FALSE]
+    if (nrow(available) == 0L) {
+      etx_abort(paste0("No ", lang, " archives are published."),
+                class = "estilex_no_corpus")
     }
-    return(year)
+    return(sort(available$year))
   }
 
-  available <- etx_list_archives()
-  available <- available[available$lang == lang, , drop = FALSE]
+  year <- suppressWarnings(as.integer(year))
+  if (length(year) == 0L || anyNA(year)) {
+    etx_abort('`year` must be "all" or one or more four-digit years.',
+              class = "estilex_bad_argument")
+  }
+  sort(unique(year))
+}
 
-  if (nrow(available) == 0L) {
-    etx_abort(paste0("No ", lang, " archives are published."),
-              class = "estilex_no_corpus")
+#' Download one archive to a path
+#' @noRd
+download_one_archive <- function(url, path, name, progress) {
+
+  if (isTRUE(progress)) message("Downloading ", name, " to ", dirname(path), ".")
+
+  req <- etx_request(url)
+  if (isTRUE(progress)) req <- httr2::req_progress(req)
+
+  resp <- tryCatch(
+    httr2::req_perform(req, path = path),
+    error = function(e) {
+      unlink(path)
+      etx_abort("Could not download the archive.",
+                conditionMessage(e), class = "estilex_connection_error")
+    }
+  )
+
+  if (httr2::resp_status(resp) != 200L) {
+    unlink(path)
+    etx_abort(
+      paste0("Could not download ", name, "."),
+      paste0("Server returned HTTP ", httr2::resp_status(resp), "."),
+      class = "estilex_http_error"
+    )
   }
 
-  max(available$year)
+  invisible(path)
+}
+
+#' Build the index for one archive
+#' @noRd
+index_one_archive <- function(path, archive_year) {
+
+  files <- tryCatch(
+    utils::unzip(path, list = TRUE),
+    error = function(e) {
+      etx_abort("Could not read the archive.",
+                conditionMessage(e), class = "estilex_parse_error")
+    }
+  )
+
+  ids    <- sub("\\.xml$", "", basename(files$Name))
+  parsed <- lapply(ids, etx_parse_id)
+
+  tibble::tibble(
+    id             = ids,
+    is_translation = vapply(parsed, function(p) p$is_translation, logical(1)),
+    day            = vapply(parsed, function(p) p$day, integer(1)),
+    month          = vapply(parsed, function(p) p$month, integer(1)),
+    year           = vapply(parsed, function(p) p$year, integer(1)),
+    sequence       = vapply(parsed, function(p) p$sequence, integer(1)),
+    archive_year   = as.integer(archive_year),
+    file           = files$Name
+  )
 }
 
 # ---------------------------------------------------------------------------
@@ -447,20 +478,20 @@ archive_size <- function(url) {
 }
 
 # Above this, downloading by accident is costly enough to be worth a stop.
-# The Estonian 2026 archive is around 40 GB.
+# The Estonian archives come to around 43 GB together.
 ETX_LARGE_DOWNLOAD <- 5 * 1024^3
 
 #' @noRd
-confirm_large_download <- function(size, name, force, progress,
+confirm_large_download <- function(size, name, force,
                                    interactive = base::interactive()) {
 
-  if (isTRUE(force) || is.na(size) || size < ETX_LARGE_DOWNLOAD) {
+  if (isTRUE(force) || is.na(size) || size == 0 || size < ETX_LARGE_DOWNLOAD) {
     return(invisible(TRUE))
   }
 
-  msg <- paste0(name, " is ", format_bytes(size),
-                ". Downloading it will take a long time and use that much ",
-                "disk space.")
+  msg <- paste0(name, " comes to ", format_bytes(size),
+                ". Downloading will take a long time and use that much disk ",
+                "space.")
 
   if (!isTRUE(interactive)) {
     etx_abort(
@@ -472,7 +503,6 @@ confirm_large_download <- function(size, name, force, progress,
 
   message(msg, "\n")
   answer <- readline("Continue? [y/N] ")
-
   if (!tolower(trimws(answer)) %in% c("y", "yes")) {
     etx_abort("Download cancelled.", class = "estilex_large_download")
   }
@@ -488,16 +518,38 @@ format_bytes <- function(x) {
 }
 
 # ---------------------------------------------------------------------------
+# Storage location
+# ---------------------------------------------------------------------------
+
+#' Decide where archives should live
+#'
+#' An explicit `dest` wins; otherwise ESTILEX_CORPUS_DIR if it is set; and
+#' failing that a temporary directory, which is discarded with the session and
+#' therefore needs no consent to write to.
+#'
+#' @noRd
+resolve_archive_dir <- function(dest = NULL) {
+  if (!is.null(dest)) {
+    return(normalizePath(path.expand(dest), mustWork = FALSE))
+  }
+  configured <- Sys.getenv("ESTILEX_CORPUS_DIR", unset = "")
+  if (nzchar(configured)) {
+    return(normalizePath(path.expand(configured), mustWork = FALSE))
+  }
+  file.path(tempdir(), "estilex")
+}
+
+# ---------------------------------------------------------------------------
 # Reading documents out of an archive
 # ---------------------------------------------------------------------------
 
-#' Extract and parse one document from a downloaded archive
+#' Extract and parse one document from the downloaded archives
 #'
-#' Used by the translation functions, since translation XML is not reliably
-#' available from the API: `/akt/{id}/xml` returns HTTP 500 for translation
-#' identifiers, and the metadata endpoint has failed intermittently too.
+#' Retained for documents the API cannot serve, and for working offline. The
+#' translation functions no longer need it: translations are available from
+#' the API under the /en/ route.
 #'
-#' @return A list with `status` and `body`, matching etx_get_xml().
+#' @return A list with `status`, `body` and `message`, matching etx_get_xml().
 #' @noRd
 etx_archive_xml <- function(id, lang) {
 
@@ -512,23 +564,23 @@ etx_archive_xml <- function(id, lang) {
     )
   }
 
-  wanted <- paste0(id, ".xml")
-  index  <- etx_list_documents(lang)
-  match  <- index$file[basename(index$file) == wanted]
+  index <- etx_list_documents(lang)
+  row   <- index[index$id == id, , drop = FALSE]
 
-  if (length(match) == 0L) {
+  if (nrow(row) == 0L) {
     return(list(status = "not_found", body = NULL,
-                message = paste0(id, " is not in the ", lang, " archive.")))
+                message = paste0(id, " is not in the ", lang, " archives.")))
   }
 
-  dir <- file.path(tempdir(), "estilex-extract")
+  path <- entry$archives[[as.character(row$archive_year[1])]]
+  dir  <- file.path(tempdir(), "estilex-extract")
   if (!dir.exists(dir)) dir.create(dir, recursive = TRUE)
 
-  utils::unzip(entry$path, files = match[1], exdir = dir, overwrite = TRUE)
-  path <- file.path(dir, match[1])
+  utils::unzip(path, files = row$file[1], exdir = dir, overwrite = TRUE)
 
   doc <- tryCatch(
-    suppressWarnings(xml2::read_xml(path, encoding = "UTF-8")),
+    suppressWarnings(xml2::read_xml(file.path(dir, row$file[1]),
+                                    encoding = "UTF-8")),
     error = function(e) {
       etx_abort("Could not parse the archived document.",
                 conditionMessage(e), class = "estilex_parse_error")

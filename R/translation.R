@@ -1,17 +1,15 @@
 #' Retrieve the English translation of an Estonian act
 #'
 #' Follows the translation link recorded in the act's metadata and returns the
-#' translation from the downloaded bulk archive.
+#' translation.
 #'
-#' @section Why the archive rather than the API:
+#' @section Unofficial translations:
 #'
-#' Translation XML is not reliably available from the API. Requesting
-#' `/akt/{translationId}/xml` returns HTTP 500, and the metadata endpoint for
-#' translation identifiers has failed intermittently as well — the same
-#' identifier answered normally on one day and failed on the next two. This
-#' was reported to Riigi Teataja in September 2026. Until it is fixed, the
-#' bulk archive is the only dependable route, so [etx_download_corpus()] must
-#' be called first.
+#' Only the Estonian text has legal force in domestic proceedings. English
+#' translations are kept up to date but are not official texts, so the Riigi
+#' Teataja holds them apart from the law in force, on a separate `/en/` route.
+#' estilex follows that route automatically — identifiers beginning with 5 are
+#' translations — so no archive download is needed.
 #'
 #' @section Whether a translation is current:
 #'
@@ -21,9 +19,8 @@
 #' Publication dates are not a useful signal: they commonly differ by days
 #' even when the translation is up to date.
 #'
-#' A translation has no official legal force. Section 12 of the Riigi Teataja
-#' Act requires reproduced texts to cite the published version, and
-#' `source_url` is provided for that purpose.
+#' Section 12 of the Riigi Teataja Act requires reproduced texts to cite the
+#' published version, and `source_url` is provided for that purpose.
 #'
 #' @param id Identifier of an Estonian act. See [etx_get_doc()].
 #'
@@ -32,18 +29,15 @@
 #'   `kehtivuse_algus_en`, `is_current`, `text`, `n_char`, `source_url`,
 #'   `source_url_en` and `error_message`.
 #'
-#'   `status` is `"ok"`, `"no_translation"` when the act has none,
-#'   `"not_in_archive"` when the link exists but the document is not in the
-#'   downloaded archive, `"not_found"` or `"error"`.
+#'   `status` is `"ok"`, `"no_translation"` when the act has none, or
+#'   `"not_found"` or `"error"` when retrieval failed.
 #'
-#' @seealso [etx_get_parallel()] for section-by-section alignment,
-#'   [etx_download_corpus()]
+#' @seealso [etx_get_parallel()] for section-by-section alignment
 #'
 #' @source Riigi Teataja, <https://www.riigiteataja.ee>.
 #'
 #' @examples
 #' if (FALSE) {
-#'   etx_download_corpus("en")
 #'   tr <- etx_get_translation("111042025003")
 #'   tr$is_current
 #'   cat(substr(tr$text, 1, 400))
@@ -56,7 +50,8 @@ etx_get_translation <- function(id) {
   doc <- etx_get_doc(id)
 
   if (!identical(doc$status, "ok")) {
-    return(translation_row(id, doc$status, list(error_message = doc$error_message)))
+    return(translation_row(id, doc$status,
+                           list(error_message = doc$error_message)))
   }
 
   translation_id <- doc$tolke_seos_id
@@ -64,11 +59,11 @@ etx_get_translation <- function(id) {
     return(translation_row(id, "no_translation", list(pealkiri = doc$pealkiri)))
   }
 
-  res <- etx_archive_xml(translation_id, "en")
+  res <- etx_get_xml(translation_id)
 
   if (!identical(res$status, "ok")) {
     return(translation_row(
-      id, "not_in_archive",
+      id, res$status,
       list(
         pealkiri       = doc$pealkiri,
         translation_id = translation_id,
@@ -80,11 +75,8 @@ etx_get_translation <- function(id) {
   sisu <- xml2::xml_find_first(res$body, "//sisu")
   txt  <- if (inherits(sisu, "xml_missing")) NA_character_ else render_content(sisu)
 
-  # The translation's own validity dates live in its XML metadata, since the
-  # metadata endpoint is unreliable for translation identifiers.
-  #
   # <kehtivus> has kehtivuseAlgus and kehtivuseLopp children. Reading the
-  # element's text would concatenate them into something like
+  # element's own text would concatenate them into something like
   # "2023-06-012023-06-30+03:00", from which taking the first ten characters
   # happens to give the right answer for the wrong reason.
   kehtivus_en <- parse_date_est(xml_chr(res$body, "//kehtivus/kehtivuseAlgus"))
@@ -130,16 +122,14 @@ etx_get_translation <- function(id) {
 #' comparing an older version of an act against its translation gives a
 #' contemporaneous result rather than an anachronistic one.
 #'
-#' Combined with the version list from the API and an archive reaching back to
-#' 2013, this makes translation fidelity measurable over time rather than only
-#' at the present moment. `kehtivuse_algus` and `kehtivuse_algus_en` record
-#' which two versions were compared.
+#' `kehtivuse_algus` and `kehtivuse_algus_en` record which two versions were
+#' compared, which makes translation fidelity measurable over time rather than
+#' only at the present moment.
 #'
 #' @section Missing translations:
 #'
-#' Most Estonian acts have no English translation: the archive holds a few
-#' thousand, against a far larger body of legislation. When a translation is
-#' absent, the Estonian rows are still returned with `text_en` missing, and
+#' Most Estonian acts have no English translation. When one is absent, the
+#' Estonian rows are still returned with `text_en` missing, and
 #' `has_translation` is `FALSE`. The same applies to individual sections that
 #' appear in one language and not the other.
 #'
@@ -166,14 +156,12 @@ etx_get_translation <- function(id) {
 #'       Teataja Act.}
 #'   }
 #'
-#'   Zero rows, with a warning, if the Estonian act cannot be retrieved.
+#'   Zero rows if the Estonian act cannot be retrieved.
 #'
-#' @seealso [etx_get_translation()], [etx_get_paragraphs()],
-#'   [etx_download_corpus()]
+#' @seealso [etx_get_translation()], [etx_get_paragraphs()]
 #'
 #' @examples
 #' if (FALSE) {
-#'   etx_download_corpus("en")
 #'   par <- etx_get_parallel("111042025003")
 #'
 #'   # Sections whose translation is much shorter than the original
@@ -198,13 +186,13 @@ etx_get_parallel <- function(id) {
   en <- NULL
   kehtivus_en <- as.Date(NA)
   if (!is.na(translation_id)) {
-    res <- etx_archive_xml(translation_id, "en")
+    res <- etx_get_xml(translation_id)
     if (identical(res$status, "ok")) {
       en <- sections_from_xml(res$body)
       kehtivus_en <- parse_date_est(xml_chr(res$body, "//kehtivus/kehtivuseAlgus"))
     } else {
-      warning("Translation ", translation_id, " is not in the archive: ",
-              res$message, call. = FALSE)
+      warning("Could not retrieve translation ", translation_id, ": ",
+              res$message %||% res$status, call. = FALSE)
       translation_id <- NA_character_
     }
   }
@@ -233,11 +221,6 @@ etx_get_parallel <- function(id) {
     text_en            = text_en,
     n_char_et          = nchar(et_sections$text),
     n_char_en          = nchar(text_en),
-    # Constant across the table, but carried on every row so the temporal
-    # context survives a join with other tables. Riigi Teataja pairs each
-    # consolidated version with the translation matching it, so these dates
-    # need not be equal: a 2015 consolidation links to a translation dated
-    # 2020, and the comparison is still the correct one.
     kehtivuse_algus    = kehtivus_et,
     kehtivuse_algus_en = kehtivus_en,
     source_url         = urls$source_url

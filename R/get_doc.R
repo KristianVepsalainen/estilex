@@ -19,9 +19,21 @@
 #' numbers in the same space, such as `24304`, so identifiers are always
 #' handled as strings and no fixed width is assumed.
 #'
+#' #' `is_translation` follows the same rule as the router: only a twelve-digit
+#' identifier beginning with 5 is a translation, so a short legacy identifier
+#' is reported as an Estonian text rather than as unknown.
+#'
 #' Two identifier spaces coexist. `id` and `kehtiv_id` refer to one
-#' consolidated version; `grupi_id` refers to the act across all its versions
-#' and is what `etx_get_versions()` expects.
+#' consolidated version; `grupi_id` refers to the act across all its
+#' versions. Group identifiers are not shared between languages: a
+#' translation's group belongs to a space of its own, and `tolke_seos_id` is
+#' the only bridge between the two.
+#'
+#' estilex provides no function for listing the versions of an act. The
+#' interface that would answer that is built for the Riigi Teataja web front
+#' end and carries no public support. Older versions do have identifiers of
+#' their own, so a point-in-time query works wherever the identifier is
+#' known.
 #'
 #' @section Missing documents:
 #'
@@ -33,6 +45,10 @@
 #' giving up. A clean 404 is reported as `"not_found"`.
 #'
 #' @section Attribution:
+#'
+#' Section 12 of the Riigi Teataja Act requires a reproduced text to cite the
+#' version it was taken from. `source_url` gives the canonical address of the
+#' document for that purpose, and it is returned even when retrieval failed.
 #'
 #'
 #' @param id A Riigi Teataja act identifier.
@@ -47,6 +63,9 @@
 #'     \item{`tekstiliik`}{Text type, e.g. `"terviktekst"` (consolidated).}
 #'     \item{`dokumentliik`}{Instrument type, e.g. `"seadus"` (act).}
 #'     \item{`akti_staatus`}{e.g. `"KEHTIV"` (in force).}
+#'     \item{`kehtivus_staatus`}{State of this version, as the service
+#'       reports it. Kept apart from `status`, which reports the outcome of
+#'       the request rather than anything about the act.}
 #'     \item{`kehtivuse_algus`, `kehtivuse_lopp`}{Period of validity.}
 #'     \item{`avaldamise_kuupaev`}{Publication date.}
 #'     \item{`is_translation`}{Whether this is a translation.}
@@ -60,6 +79,7 @@
 #'       editions, court analyses and translations into other languages —
 #'       not cross-references to other acts, which
 #'       [etx_get_references()] returns.}
+#'     \item{`source_url`}{Canonical Riigi Teataja address of the document.}
 #'     \item{`error_message`}{Explanation when `status` is `"error"`.}
 #'   }
 #'
@@ -102,8 +122,13 @@ etx_get_doc <- function(id) {
 #' @noRd
 etx_doc_row <- function(id, status, values = list()) {
 
-  parsed <- etx_parse_id(id)
-  urls   <- etx_urls(id)
+  urls <- etx_urls(id)
+
+  # Report what the router decided. Filtering on is_translation must never
+  # disagree with the address the request was sent to, and a short legacy
+  # identifier is handled as an Estonian text because the translation space
+  # is twelve digits throughout.
+  is_tr <- is_translation_id(id)
 
   template <- list(
     status             = status,
@@ -119,7 +144,7 @@ etx_doc_row <- function(id, status, values = list()) {
     kehtivuse_algus    = as.Date(NA),
     kehtivuse_lopp     = as.Date(NA),
     avaldamise_kuupaev = as.Date(NA),
-    is_translation     = parsed$is_translation,
+    is_translation     = is_tr,
     tolke_seos_id      = NA_character_,
     tolke_seos_tekst   = NA_character_,
     liigitused         = NA_character_,

@@ -258,8 +258,17 @@ etx_get_xml <- function(id) {
   if (!identical(res$status, "ok")) return(res)
 
   doc <- tryCatch(
-    suppressWarnings(
-      httr2::resp_body_xml(res$response, check_type = FALSE, encoding = "UTF-8")
+    withCallingHandlers(
+      httr2::resp_body_xml(res$response, check_type = FALSE, encoding = "UTF-8"),
+      warning = function(w) {
+        # The namespace declaration is not an absolute URI
+        # (tyviseadus_1_10.02.2010 for acts, Juurakt for translations), so
+        # libxml2 warns once per parse. Not actionable, and the namespace is
+        # stripped immediately afterwards. Other warnings are left alone.
+        if (grepl("not absolute", conditionMessage(w), fixed = TRUE)) {
+          invokeRestart("muffleWarning")
+        }
+      }
     ),
     error = function(e) {
       etx_abort("Could not parse the XML response.",

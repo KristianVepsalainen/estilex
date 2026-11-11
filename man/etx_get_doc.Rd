@@ -23,6 +23,9 @@ A one-row \link[tibble:tibble]{tibble}:
 \item{\code{tekstiliik}}{Text type, e.g. \code{"terviktekst"} (consolidated).}
 \item{\code{dokumentliik}}{Instrument type, e.g. \code{"seadus"} (act).}
 \item{\code{akti_staatus}}{e.g. \code{"KEHTIV"} (in force).}
+\item{\code{kehtivus_staatus}}{State of this version, as the service
+reports it. Kept apart from \code{status}, which reports the outcome of
+the request rather than anything about the act.}
 \item{\code{kehtivuse_algus}, \code{kehtivuse_lopp}}{Period of validity.}
 \item{\code{avaldamise_kuupaev}}{Publication date.}
 \item{\code{is_translation}}{Whether this is a translation.}
@@ -36,6 +39,7 @@ separated.}
 editions, court analyses and translations into other languages —
 not cross-references to other acts, which
 \code{\link[=etx_get_references]{etx_get_references()}} returns.}
+\item{\code{source_url}}{Canonical Riigi Teataja address of the document.}
 \item{\code{error_message}}{Explanation when \code{status} is \code{"error"}.}
 }
 }
@@ -59,9 +63,21 @@ A leading 1 marks an Estonian text and a 5 marks a translation, which
 numbers in the same space, such as \code{24304}, so identifiers are always
 handled as strings and no fixed width is assumed.
 
+#' \code{is_translation} follows the same rule as the router: only a twelve-digit
+identifier beginning with 5 is a translation, so a short legacy identifier
+is reported as an Estonian text rather than as unknown.
+
 Two identifier spaces coexist. \code{id} and \code{kehtiv_id} refer to one
-consolidated version; \code{grupi_id} refers to the act across all its versions
-and is what \code{etx_get_versions()} expects.
+consolidated version; \code{grupi_id} refers to the act across all its
+versions. Group identifiers are not shared between languages: a
+translation's group belongs to a space of its own, and \code{tolke_seos_id} is
+the only bridge between the two.
+
+estilex provides no function for listing the versions of an act. The
+interface that would answer that is built for the Riigi Teataja web front
+end and carries no public support. Older versions do have identifiers of
+their own, so a point-in-time query works wherever the identifier is
+known.
 }
 
 \section{Missing documents}{
@@ -77,6 +93,10 @@ giving up. A clean 404 is reported as \code{"not_found"}.
 
 \section{Attribution}{
 
+
+Section 12 of the Riigi Teataja Act requires a reproduced text to cite the
+version it was taken from. \code{source_url} gives the canonical address of the
+document for that purpose, and it is returned even when retrieval failed.
 }
 
 \examples{

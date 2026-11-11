@@ -1,0 +1,6 @@
+desc::desc_set("Language", "en-GB")
+devtools::spell_check()
+
+devtools::document()
+devtools::check(cran = TRUE)
+

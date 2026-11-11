@@ -42,7 +42,7 @@
 #'     \item{`ref_index`}{Position of the note in the document.}
 #'     \item{`scope_nr`}{Number of the section the note belongs to, or
 #'       missing for document-level notes.}
-#'     \item{`scope`}{The same as displayed, e.g. `"\u00a7 127."}
+#'      \item{`scope`}{The same as displayed, section sign included.}
 #'     \item{`akt_viide`}{Identifier of the amending act. Accepted by
 #'       [etx_get_doc()].}
 #'     \item{`akti_kuupaev`}{Date of the amending act.}

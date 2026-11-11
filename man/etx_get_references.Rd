@@ -19,7 +19,15 @@ A \link[tibble:tibble]{tibble} with one row per amendment note:
 \item{\code{ref_index}}{Position of the note in the document.}
 \item{\code{scope_nr}}{Number of the section the note belongs to, or
 missing for document-level notes.}
-\item{\code{scope}}{The same as displayed, e.g. \verb{"\\u00a7 127."\} \\item\{}akt_viide\verb{\}\{Identifier of the amending act. Accepted by [etx_get_doc()].\} \\item\{}akti_kuupaev\verb{\}\{Date of the amending act.\} \\item\{}joustumine\verb{\}\{Date the amendment entered into force.\} \\item\{}rt_osa\verb{, }rt_aasta\verb{, }rt_nr\verb{, }rt_artikkel\verb{\}\{Components of the Riigi Teataja publication reference.\} \\item\{}rt_viide\verb{\}\{The publication reference in citation form.\} \\item\{}source_url`}{Canonical link, per section 12 of the Riigi
+\item{\code{scope}}{The same as displayed, section sign included.}
+\item{\code{akt_viide}}{Identifier of the amending act. Accepted by
+\code{\link[=etx_get_doc]{etx_get_doc()}}.}
+\item{\code{akti_kuupaev}}{Date of the amending act.}
+\item{\code{joustumine}}{Date the amendment entered into force.}
+\item{\code{rt_osa}, \code{rt_aasta}, \code{rt_nr}, \code{rt_artikkel}}{Components of the
+Riigi Teataja publication reference.}
+\item{\code{rt_viide}}{The publication reference in citation form.}
+\item{\code{source_url}}{Canonical link, per section 12 of the Riigi
 Teataja Act.}
 }
 

@@ -1,0 +1,8 @@
+base <- "https://www.riigiteataja.ee/public-api/api/v1"
+for (p in c("en/akt/523042025002/xml", "en/akt/523042025002",
+            "en/akt/523042025002/redaktsioonid")) {
+  r <- httr2::request(paste0(base, "/", p)) |>
+    httr2::req_user_agent("estilex") |>
+    httr2::req_error(is_error = \(x) FALSE) |> httr2::req_perform()
+  message(p, "  ", httr2::resp_status(r), "  ", httr2::resp_content_type(r))
+}

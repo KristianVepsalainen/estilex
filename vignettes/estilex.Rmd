@@ -461,7 +461,7 @@ version identifier is known, as shown above; only enumerating versions is
 unavailable.
 
 **ELI identifiers.** The previous Riigi Teataja implemented
-[ELI](https://eur-lex.europa.eu/eli-register/about.html), but the scheme did
+[ELI](https://eur-lex.europa.eu/eli-register/what_is_eli.html), but the scheme did
 not conform to the standard and was withdrawn in June 2026. The old URIs now
 redirect to plain act addresses. estilex therefore offers no `eli` column,
 rather than constructing something ELI-shaped that is not an ELI.

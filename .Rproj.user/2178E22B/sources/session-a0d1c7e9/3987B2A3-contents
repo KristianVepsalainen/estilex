@@ -1,0 +1,4 @@
+devtools::document()
+devtools::test()
+covr::package_coverage()
+covr::report()

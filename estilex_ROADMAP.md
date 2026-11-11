@@ -17,13 +17,18 @@ public API and its open data archives. Part of **lexverse**, alongside
 
 ## 1. Status
 
-Ten exported functions, 203 tests, of which about 150 run offline. The
-document-level API is complete: retrieval, text, provisions, amendment
+Version 0.1.0. Eleven exported functions, 328 tests, the majority offline.
+The document-level API is complete: retrieval, text, provisions, amendment
 history, translations, section-aligned parallel texts, and corpus
 enumeration from the archives.
 
-Remaining before CRAN: README, vignette, spell check, version bump, the
-usual check matrix. See section 12.
+Coverage is 64% overall, `get_doc.R` 98% and `translation.R` 100%. The two
+low figures, `utils.R` at 41% and `corpus.R` at 43%, are understated:
+`covr` skips the network tests, and no test downloads an archive. Neither is
+worth chasing further.
+
+README and the pre-computed vignette are written. Remaining before CRAN:
+spell check and the usual check matrix. See section 12.
 
 ---
 
@@ -408,10 +413,16 @@ is an argument the ELI plan did not anticipate.
 
 ## 12. CRAN pre-flight
 
-- [ ] README and pre-computed vignette (`.Rmd.orig` + `data-raw/precompute.R`)
-- [ ] Both need rewriting: the drafts assumed translations came from the
-      archive, which is no longer true and made the first impression of the
-      package a gigabyte download
+- [x] README and pre-computed vignette (`.Rmd.orig` + `data-raw/precompute.R`).
+      Rewritten: the drafts assumed translations came from the archive, which
+      made the first impression of the package a gigabyte download. The
+      archive section is last and `eval = FALSE`
+- [x] `DESCRIPTION` filled in. It was still the `create_package()` skeleton,
+      down to `First Last <first.last@example.com>`, and would have gone to
+      CRAN that way. `Language: en-GB`, `testthat (>= 3.2.0)` for
+      `local_mocked_bindings()`
+- [x] `test-get_doc.R` and `test-translation.R` added. `etx_get_doc()` had
+      **zero** coverage before this, while every other function depends on it
 - [ ] `urlchecker::url_check()`
 - [ ] `usethis::use_spell_check()` — Estonian vocabulary in `inst/WORDLIST`
       (*peatükk*, *paragrahv*, *lõige*, *muutmismärge*, *terviktekst*,
@@ -422,10 +433,31 @@ is an argument the ELI plan did not anticipate.
 - [ ] Check `git remote -v` is SSH, not HTTPS. `use_github()` sets HTTPS and
       the global `insteadOf` rule does not apply to remotes already set.
 
-Submit after `danlex` is accepted. The two share an architecture — network
-client, `if (FALSE)` examples, pre-computed vignette, `status` columns — so a
-reviewer's objection to one would apply to the other, and it is better to
-hear it once.
+The condition for submitting is met: `danlex` is on CRAN. The two share an
+architecture (network client, `if (FALSE)` examples, pre-computed vignette,
+`status` columns), so waiting meant hearing a reviewer's objection once
+rather than twice.
+
+### Three faults found while writing the README and vignette
+
+Documentation work turned out to be a better auditor than the test suite,
+because it exercises the package the way a reader would.
+
+1. **`api-exploration.R` was in `R/`**, not in `data-raw/`. It would have
+   shipped inside the package, and `pkgload::load_all()` ran its network
+   calls on every load. The single libxml2 namespace warning that survived
+   the pre-compute run came from there, not from package code: all six
+   retrieval functions were already clean. Moved to `data-raw/`, which is
+   `.Rbuildignore`d.
+2. **`is_translation` was `NA` for short legacy identifiers.** `etx_doc_row()`
+   took it from `etx_parse_id()`, which only speaks for the twelve-digit
+   form, while the router used `is_translation_id()`, which answers `FALSE`.
+   The column therefore disagreed with the address the request went to, and
+   `subset(docs, !is_translation)` would silently drop every pre-2010
+   consolidation. Now both read from `is_translation_id()`.
+3. **`etx_get_doc()`'s roxygen promised `etx_get_versions()`**, which section
+   9 explains will never exist, and carried an empty `@section Attribution:`.
+   Two columns were missing from `@return` as well.
 
 ---
 

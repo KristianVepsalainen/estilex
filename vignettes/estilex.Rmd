@@ -1,0 +1,495 @@
+---
+title: "Estonian legislation with estilex"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Estonian legislation with estilex}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+
+
+
+``` r
+library(estilex)
+```
+
+This vignette is pre-computed. Every result below was produced by a real
+request to the Riigi Teataja, but the code is not run when the package is
+built or checked, so neither CRAN nor your own `R CMD check` needs a network
+connection. The source with live calls is `vignettes/estilex.Rmd.orig`.
+
+## What estilex covers
+
+The Riigi Teataja is Estonia's official legal gazette. Its public API, in
+service since June 2026, serves consolidated texts of acts and regulations
+as JSON and XML, together with their amendment histories and their English
+translations.
+
+estilex wraps that API and adds the parts it does not provide: a document
+model in tidy tibbles, text rendered with its structure intact, and a join
+between the Estonian and English versions of an act at section level.
+
+What the API does not offer is search. There is no endpoint that answers
+"which acts mention X", and none that lists what exists. Identifiers come
+from somewhere else, which the last section of this vignette deals with.
+
+## Identifiers
+
+A document is addressed by a twelve-digit identifier, visible in the
+address of any Riigi Teataja page. The format encodes a type digit, a date
+and a sequence number:
+
+```
+111042025003  ->  1 | 11 | 04 | 2025 | 003
+```
+
+A leading `5` marks an English translation. estilex uses that to route the
+request, because translations live on a separate path.
+
+The identifier names one consolidated version, not the act in general. Every
+amendment produces a new one. Older versions keep their own identifiers and
+can be retrieved exactly as the current one, which is how point-in-time work
+is done with this package.
+
+Identifiers are handled as character throughout. They fit in a double, but
+they are identifiers rather than numbers, and leading digits matter.
+
+The running example is the Constitution of the Republic of Estonia,
+`111042025003`.
+
+## A document
+
+
+``` r
+doc <- etx_get_doc("111042025003")
+
+doc$status
+#> [1] "ok"
+doc$pealkiri
+#> [1] "Eesti Vabariigi põhiseadus"
+doc$kehtivuse_algus
+#> [1] "2026-02-28"
+```
+
+Column names follow the source language, as elsewhere in lexverse, so that a
+field in the output can be traced back to a field in the published XML
+without a translation table:
+
+
+``` r
+names(doc)
+#>  [1] "status"             "id"                 "kehtiv_id"         
+#>  [4] "grupi_id"           "pealkiri"           "lyhend"            
+#>  [7] "tekstiliik"         "dokumentliik"       "akti_staatus"      
+#> [10] "kehtivus_staatus"   "kehtivuse_algus"    "kehtivuse_lopp"    
+#> [13] "avaldamise_kuupaev" "is_translation"     "tolke_seos_id"     
+#> [16] "tolke_seos_tekst"   "liigitused"         "n_viited"          
+#> [19] "source_url"         "error_message"
+```
+
+Retrieval never throws on a document that cannot be fetched. The `status`
+column carries the outcome instead:
+
+
+``` r
+bad <- etx_get_doc("999999999999")
+bad$status
+#> [1] "not_found"
+bad$error_message
+#> [1] NA
+```
+
+This matters when a list of identifiers is processed in a loop, which is the
+normal case. One missing document should not end the run.
+
+## Text
+
+`etx_get_text()` returns the whole text as a single string, with chapter and
+section headings in place:
+
+
+``` r
+txt <- etx_get_text("111042025003")
+nchar(txt$text)
+#> [1] 54343
+cat(substr(txt$text, 1, 450))
+#> Kõikumatus usus ja vankumatus tahtes kindlustada ja arendada riiki,
+#> mis on loodud Eesti rahva riikliku enesemääramise kustumatul õigusel ja välja kuulutatud 1918. aasta 24. veebruaril,
+#> mis on rajatud vabadusele, õiglusele ja õigusele,
+#> mis on kaitseks sisemisele ja välisele rahule ning pandiks praegustele ja tulevastele põlvedele nende ühiskondlikus edus ja üldises kasus,
+#> mis peab tagama eesti rahvuse, keele ja kultuuri säilimise läbi aegade –
+#> võt
+```
+
+`etx_get_paragraphs()` returns the same content one provision per row, with
+chapter context on each:
+
+
+``` r
+par <- etx_get_paragraphs("111042025003")
+dim(par)
+#> [1] 324  12
+names(par)
+#>  [1] "id"               "is_translation"   "peatykk_nr"       "peatykk"         
+#>  [5] "peatykk_pealkiri" "paragrahv_index"  "paragrahv_nr"     "paragrahv"       
+#>  [9] "loige_index"      "n_alampunkt"      "text"             "source_url"
+```
+
+
+``` r
+par[par$paragrahv_nr == "10", c("peatykk_nr", "peatykk_pealkiri",
+                                "paragrahv", "text")]
+#> # A tibble: 1 × 4
+#>   peatykk_nr peatykk_pealkiri                     paragrahv text                
+#>   <chr>      <chr>                                <chr>     <chr>               
+#> 1 II         PÕHIÕIGUSED, VABADUSED JA KOHUSTUSED § 10.     Käesolevas peatükis…
+```
+
+Chapters are available by grouping:
+
+
+``` r
+tapply(par$paragrahv_nr, par$peatykk_pealkiri, function(x) length(unique(x)))
+#>                  KOHALIK OMAVALITSUS                                KOHUS 
+#>                                    7                                    8 
+#>                        ÕIGUSKANTSLER PÕHIÕIGUSED, VABADUSED JA KOHUSTUSED 
+#>                                    7                                   48 
+#>                 PÕHISEADUSE MUUTMINE             RAHANDUS JA RIIGIEELARVE 
+#>                                    8                                    9 
+#>                               RAHVAS                          RIIGIKAITSE 
+#>                                    3                                    8 
+#>                            RIIGIKOGU                        RIIGIKONTROLL 
+#>                                   18                                    7 
+#>                         SEADUSANDLUS                  VABARIIGI PRESIDENT 
+#>                                    2                                    9 
+#>                   VABARIIGI VALITSUS         VÄLISSUHTED JA VÄLISLEPINGUD 
+#>                                   16                                    4 
+#>                            ÜLDSÄTTED 
+#>                                    7
+```
+
+Sub-point markers such as `1)` are kept inline in the text. Estonian
+cross-references cite sub-points, so removing the markers would cost more
+than the noise they add.
+
+## Amendment history
+
+Each amendment leaves a `muutmismärge` in the XML. These sit at two levels:
+some record an amendment to the act, others to a single section.
+
+
+``` r
+ref <- etx_get_references("111042025003")
+dim(ref)
+#> [1] 16 13
+names(ref)
+#>  [1] "id"           "ref_index"    "scope_nr"     "scope"        "akt_viide"   
+#>  [6] "akti_kuupaev" "joustumine"   "rt_osa"       "rt_aasta"     "rt_nr"       
+#> [11] "rt_artikkel"  "rt_viide"     "source_url"
+```
+
+`scope_nr` gives the section an entry attaches to, or `NA` for an entry at
+document level:
+
+
+``` r
+table(document_level = is.na(ref$scope_nr))
+#> document_level
+#> FALSE  TRUE 
+#>     9     7
+```
+
+
+``` r
+ref[!is.na(ref$scope_nr), c("scope_nr", "akti_kuupaev", "joustumine",
+                            "rt_viide")]
+#> # A tibble: 9 × 4
+#>   scope_nr akti_kuupaev joustumine rt_viide          
+#>   <chr>    <date>       <date>     <chr>             
+#> 1 65       NA           2011-07-22 RT I 1            
+#> 2 74       NA           2011-07-22 RT I 1            
+#> 3 78       NA           2011-07-22 RT I 1            
+#> 4 78       NA           2011-07-22 RT I 1            
+#> 5 78       NA           2011-07-22 RT I 1            
+#> 6 127      NA           2011-07-22 RT I 1            
+#> 7 128      NA           2011-07-22 RT I 1            
+#> 8 156      NA           2005-10-17 RT I 2003, 29, 174
+#> 9 156      NA           2026-03-01 RT I 1
+```
+
+`rt_viide` assembles the publication components into the citation form
+Estonian legal sources use in print, for example `RT I 2003, 29, 174`. It is
+the string to quote in a footnote. The four components are kept separately as
+well, in `rt_osa`, `rt_aasta`, `rt_nr` and `rt_artikkel`, which is the form to
+use for filtering or for joining against other sources.
+
+The identifier of the amending act is also present, and it uses the same
+identifier space as the acts themselves. The citation network is therefore
+traversable directly, with no lookup table:
+
+
+``` r
+amending <- ref$akt_viide[!is.na(ref$akt_viide)][1]
+amending
+#> [1] "550572"
+etx_get_doc(amending)$pealkiri
+#> [1] "Eesti Vabariigi põhiseaduse muutmise seadus kohaliku omavalitsuse volikogu valimiseks neljaks aastaks"
+```
+
+## Translations
+
+An act's English translation, where one exists, is reached through the link
+recorded in its metadata:
+
+
+``` r
+tr <- etx_get_translation("111042025003")
+
+tr$status
+#> [1] "ok"
+tr$pealkiri_en
+#> [1] "The Constitution of the Republic of Estonia"
+tr$is_current
+#> [1] TRUE
+cat(substr(tr$text, 1, 350))
+#> With unwavering faith and a steadfast will to strengthen and develop the state,
+#> which is established on the inextinguishable right of the people of Estonia to national self-determination and which was proclaimed on 24 February 1918,
+#> which is founded on liberty, justice and law,
+#> which is for the defence of internal and external peace, and is a pledg
+```
+
+Three things are worth knowing about these translations.
+
+**They are not official.** Only the Estonian text has legal force in
+domestic proceedings. Translations are kept up to date, but they are not
+usable as official texts, which is why the Riigi Teataja holds them apart
+from the law in force on a separate route. estilex follows that route
+automatically.
+
+**Most acts have none.** The English archives hold roughly 6,800 documents
+against a far larger body of Estonian legislation.
+
+**Currency is established by comparing validity dates, not publication
+dates.** Translations carry no version information of their own, and
+publication dates commonly differ by days even when the translation is
+current. `is_current` compares `kehtivuse_algus` on both sides:
+
+
+``` r
+tr[, c("kehtivuse_algus", "kehtivuse_algus_en", "is_current")]
+#> # A tibble: 1 × 3
+#>   kehtivuse_algus kehtivuse_algus_en is_current
+#>   <date>          <date>             <lgl>     
+#> 1 2026-02-28      2026-03-01         TRUE
+```
+
+## Parallel texts
+
+The feature that distinguishes this package. Section numbering is preserved
+exactly across languages, so the two versions join on the section number
+rather than on position:
+
+
+``` r
+pp <- etx_get_parallel("111042025003")
+dim(pp)
+#> [1] 168  14
+names(pp)
+#>  [1] "id"                 "translation_id"     "has_translation"   
+#>  [4] "peatykk_nr"         "peatykk_pealkiri"   "paragrahv_nr"      
+#>  [7] "paragrahv"          "text_et"            "text_en"           
+#> [10] "n_char_et"          "n_char_en"          "kehtivuse_algus"   
+#> [13] "kehtivuse_algus_en" "source_url"
+```
+
+
+``` r
+pp[pp$paragrahv_nr == "10", c("paragrahv", "text_et", "text_en")]
+#> # A tibble: 1 × 3
+#>   paragrahv text_et                                                      text_en
+#>   <chr>     <chr>                                                        <chr>  
+#> 1 § 10.     Käesolevas peatükis loetletud õigused, vabadused ja kohustu… The ri…
+```
+
+Subsection counts can differ slightly between languages, so all subsections
+of a section are concatenated and the join stops at section level. Aligning
+below it would work in most documents and fail silently in others, which is
+the worst kind of defect in research use.
+
+A first, crude measure of divergence is length. Estonian is more compact
+than English in most registers, so a translation much shorter than its
+original is unusual enough to be worth a look:
+
+
+``` r
+ratio <- pp$n_char_en / pp$n_char_et
+summary(ratio)
+#>    Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+#>  0.1993  1.1699  1.2651  1.2781  1.3819  1.7895
+
+head(pp[!is.na(ratio) & ratio < 0.7, c("paragrahv", "n_char_et", "n_char_en")])
+#> # A tibble: 1 × 3
+#>   paragrahv n_char_et n_char_en
+#>   <chr>         <int>     <int>
+#> 1 § 168.          858       171
+```
+
+Sections with no translation at all come back as rows with `text_en`
+missing, rather than being dropped:
+
+
+``` r
+sum(is.na(pp$text_en))
+#> [1] 0
+```
+
+That is deliberate. In work on translation fidelity an absent translation is
+an observation, not an error, and it is the structure of the Estonian act
+that makes the gap measurable.
+
+### Fidelity over time
+
+Riigi Teataja links each consolidated version to the translation that
+matches it, rather than always to the newest. The two dates on every row
+record which pair was compared:
+
+
+``` r
+unique(pp[, c("id", "translation_id", "kehtivuse_algus",
+              "kehtivuse_algus_en")])
+#> # A tibble: 1 × 4
+#>   id           translation_id kehtivuse_algus kehtivuse_algus_en
+#>   <chr>        <chr>          <date>          <date>            
+#> 1 111042025003 523042025002   2026-02-28      2026-03-01
+```
+
+Because older versions have identifiers of their own, the same comparison
+can be repeated at an earlier point in time, and the result is
+contemporaneous rather than anachronistic:
+
+
+``` r
+old <- etx_get_parallel("115052015002")
+unique(old[, c("kehtivuse_algus", "kehtivuse_algus_en")])
+#> # A tibble: 1 × 2
+#>   kehtivuse_algus kehtivuse_algus_en
+#>   <date>          <date>            
+#> 1 2015-08-12      2015-08-14
+```
+
+Two measurements of the same act, eleven years apart, each against the
+translation then in force. No other source in the lexverse family supports
+this.
+
+## Finding identifiers
+
+Since the API has no search endpoint, a list of what exists has to come from
+the open data archives. These are annual ZIP files of XML, one document per
+file, with the identifier as the filename.
+
+
+``` r
+etx_list_archives()
+```
+
+```
+#> # A tibble: 6 x 4
+#>   lang  year  name              size_mb
+#>   <chr> <chr> <chr>               <dbl>
+#> 1 et    2024  xml.2024.zip          344
+#> 2 et    2025  xml.2025.zip         2640
+#> 3 et    2026  xml.2026.zip        39700
+#> 4 en    2024  xml.2024.en.zip        39
+#> 5 en    2025  xml.2025.en.zip        70
+#> 6 en    2026  xml.2026.en.zip      1010
+```
+
+The English set is about 1.1 GB in total, the Estonian set about 43 GB.
+Nothing is downloaded unless asked for:
+
+
+``` r
+etx_download_corpus("en")
+
+idx <- etx_list_documents("en")
+nrow(idx)
+head(idx)
+
+etx_corpus_status()
+```
+
+Three properties of the archives shape how this works.
+
+**They are complementary, not snapshots.** An annual folder holds the acts
+published that year together with earlier acts that received a new version
+during it, because they were amended or had an end of validity recorded.
+Downloading only the newest year loses around 6% of the English corpus, so
+`year = "all"` is the default.
+
+**Coverage begins in 2024.** Acts still in force but unamended since then do
+not appear in any archive. They remain retrievable by identifier through
+`etx_get_doc()`, which has no such limit.
+
+**They are large.** A HEAD request reports the total size of everything about
+to be fetched. Above 5 GB an interactive session asks for confirmation and a
+non-interactive one stops unless `force = TRUE`, which is what keeps
+`etx_download_corpus("et")` from quietly pulling 43 GB.
+
+Archives go to a temporary directory by default, so nothing is written
+permanently without being asked for. To keep them between sessions, name a
+directory and set an environment variable so that later sessions find it:
+
+
+``` r
+etx_download_corpus("en", dest = "~/estilex-corpus")
+
+# In .Renviron, so that future sessions adopt it automatically
+# ESTILEX_CORPUS_DIR=~/estilex-corpus
+```
+
+`etx_clear_corpus()` removes archives from the temporary directory. It leaves
+a directory given through `dest` or the environment variable alone.
+
+## What is not here
+
+**Version enumeration.** An endpoint listing an act's consolidated versions
+exists, but the Riigi Teataja has stated that interfaces built for the web
+front end carry no public support. A package resting on one would be archived
+when it breaks, without warning. Point-in-time work is possible wherever a
+version identifier is known, as shown above; only enumerating versions is
+unavailable.
+
+**ELI identifiers.** The previous Riigi Teataja implemented
+[ELI](https://eur-lex.europa.eu/eli-register/about.html), but the scheme did
+not conform to the standard and was withdrawn in June 2026. The old URIs now
+redirect to plain act addresses. estilex therefore offers no `eli` column,
+rather than constructing something ELI-shaped that is not an ELI.
+
+**Case law.** The API serves legislation. Court decisions are published
+elsewhere and are out of scope here.
+
+## Citing
+
+Section 12 of the Riigi Teataja Act requires a reproduced text to cite the
+published version. Every function returns `source_url`:
+
+
+``` r
+doc$source_url
+#> [1] "https://www.riigiteataja.ee/akt/111042025003"
+tr$source_url_en
+#> [1] "https://www.riigiteataja.ee/en/akt/523042025002"
+```
+
+## Related packages
+
+estilex is part of lexverse, which follows the same conventions across
+jurisdictions: a `status` column instead of exceptions, source-language field
+names, identifiers as character, and `source_url` on every row.
+
+- [eurlex](https://cran.r-project.org/package=eurlex), EU law via Cellar
+  SPARQL
+- [finlex](https://cran.r-project.org/package=finlex), Finland
+- [swelex](https://cran.r-project.org/package=swelex), Sweden
+- [danlex](https://cran.r-project.org/package=danlex), Denmark

@@ -5,49 +5,158 @@
 
 <!-- badges: start -->
 
+[![R-CMD-check](https://github.com/KristianVepsalainen/estilex/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/KristianVepsalainen/estilex/actions/workflows/R-CMD-check.yaml)
 <!-- badges: end -->
 
-The goal of estilex is to …
+estilex retrieves Estonian legislation from the [Riigi
+Teataja](https://www.riigiteataja.ee) public API: consolidated texts,
+their structure down to subsection level, amendment histories, and
+English translations aligned section by section with the Estonian
+original.
+
+It is part of **lexverse**, a family of R packages for legal and
+regulatory data that also includes
+[eurlex](https://cran.r-project.org/package=eurlex),
+[finlex](https://cran.r-project.org/package=finlex),
+[swelex](https://cran.r-project.org/package=swelex) and
+[danlex](https://cran.r-project.org/package=danlex).
 
 ## Installation
 
-You can install the development version of estilex from
-[GitHub](https://github.com/) with:
+``` r
+install.packages("estilex")
+```
+
+Development version:
 
 ``` r
 # install.packages("pak")
 pak::pak("KristianVepsalainen/estilex")
 ```
 
-## Example
+## Usage
 
-This is a basic example which shows you how to solve a common problem:
+A document is identified by the twelve-digit Riigi Teataja identifier
+that appears in its address. The Constitution of the Republic of
+Estonia, in the consolidated version in force, is `111042025003`.
 
 ``` r
 library(estilex)
-## basic example code
+
+doc <- etx_get_doc("111042025003")
+doc$pealkiri
+#> [1] "Eesti Vabariigi põhiseadus"
+doc$kehtivuse_algus
+#> [1] "2026-02-28"
 ```
 
-What is special about using `README.Rmd` instead of just `README.md`?
-You can include R chunks like so:
+The text arrives either whole or one provision per row:
 
 ``` r
-summary(cars)
-#>      speed           dist       
-#>  Min.   : 4.0   Min.   :  2.00  
-#>  1st Qu.:12.0   1st Qu.: 26.00  
-#>  Median :15.0   Median : 36.00  
-#>  Mean   :15.4   Mean   : 42.98  
-#>  3rd Qu.:19.0   3rd Qu.: 56.00  
-#>  Max.   :25.0   Max.   :120.00
+txt <- etx_get_text("111042025003")
+nchar(txt$text)
+#> [1] 54343
+
+par <- etx_get_paragraphs("111042025003")
+nrow(par)
+#> [1] 324
+par[par$paragrahv_nr == "10", c("peatykk_pealkiri", "paragrahv", "text")]
+#> # A tibble: 1 × 3
+#>   peatykk_pealkiri                     paragrahv text                           
+#>   <chr>                                <chr>     <chr>                          
+#> 1 PÕHIÕIGUSED, VABADUSED JA KOHUSTUSED § 10.     Käesolevas peatükis loetletud …
 ```
 
-You’ll still need to render `README.Rmd` regularly, to keep `README.md`
-up-to-date. `devtools::build_readme()` is handy for this.
+Amendment history comes from the `muutmismärge` elements, which sit at
+two levels in the XML: some apply to the act, others to a single
+section.
 
-You can also embed plots, for example:
+``` r
+ref <- etx_get_references("111042025003")
+nrow(ref)
+#> [1] 16
+table(is.na(ref$scope_nr))
+#> 
+#> FALSE  TRUE 
+#>     9     7
+```
 
-<img src="man/figures/README-pressure-1.png" alt="" width="100%" />
+### Parallel texts
 
-In that case, don’t forget to commit and push the resulting figure
-files, so they display on GitHub and CRAN.
+Estonian and English versions of an act use the same section numbering,
+so they can be joined on the number rather than on position. This is
+what makes estilex more than a retrieval wrapper: translation fidelity
+becomes measurable.
+
+``` r
+pp <- etx_get_parallel("111042025003")
+nrow(pp)
+#> [1] 168
+
+# Where the translation is markedly shorter than the original
+head(pp[!is.na(pp$text_en) & pp$n_char_en < 0.7 * pp$n_char_et,
+        c("paragrahv", "n_char_et", "n_char_en")])
+#> # A tibble: 1 × 3
+#>   paragrahv n_char_et n_char_en
+#>   <chr>         <int>     <int>
+#> 1 § 168.          858       171
+```
+
+Each consolidated version is linked to the translation that corresponds
+to it, not always to the newest one, so the comparison is
+contemporaneous. The two validity dates are carried on every row for
+that reason:
+
+``` r
+unique(pp[, c("kehtivuse_algus", "kehtivuse_algus_en")])
+#> # A tibble: 1 × 2
+#>   kehtivuse_algus kehtivuse_algus_en
+#>   <date>          <date>            
+#> 1 2026-02-28      2026-03-01
+```
+
+Only the Estonian text has legal force in domestic proceedings. English
+translations are kept current but are not official texts, and the Riigi
+Teataja holds them on a separate route for that reason. estilex follows
+it automatically.
+
+### Finding identifiers
+
+The API has no search or enumeration endpoint. Identifiers come either
+from references inside documents already retrieved, or from the open
+data archives, which are downloaded on request and not by default:
+
+``` r
+etx_download_corpus("en")        # about 1.1 GB across three annual archives
+idx <- etx_list_documents("en")  # one row per document
+etx_corpus_status()
+etx_clear_corpus()
+```
+
+Archive coverage begins in 2024 and is complementary rather than
+cumulative: each annual folder holds the acts published that year
+together with earlier acts that received a new version during it. Acts
+untouched since 2024 are absent from the archives but retrievable by
+identifier.
+
+## Citing sources
+
+Section 12 of the Riigi Teataja Act requires a reproduced text to cite
+the published version. Every function returns `source_url` for that
+purpose.
+
+``` r
+doc$source_url
+#> [1] "https://www.riigiteataja.ee/akt/111042025003"
+```
+
+## Licence and disclaimer
+
+estilex is released under the MIT licence. Riigi Teataja content is
+public information; the package neither claims nor alters any right in
+it.
+
+estilex is not affiliated with the Riigi Teataja or with the Centre of
+Registers and Information Systems. The package provides no legal advice,
+and the data it returns is not a substitute for the published official
+text.

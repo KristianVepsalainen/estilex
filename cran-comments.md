@@ -1,8 +1,21 @@
 ## R CMD check results
 
-0 errors | 0 warnings | 0 notes
+0 errors | 0 warnings | 1 note
 
 * This is a new release.
+
+The note reports one URL as possibly invalid:
+
+```
+URL: https://eur-lex.europa.eu/eli-register/what_is_eli.html
+  From: inst/doc/estilex.html
+  Status: 202
+  Message: Accepted
+```
+
+The page exists and the link is correct. EUR-Lex answers automated requests
+with 202 Accepted rather than 200, so the check cannot confirm it. Opening
+the address in a browser resolves normally.
 
 ## Network use
 

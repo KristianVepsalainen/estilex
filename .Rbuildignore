@@ -6,3 +6,4 @@
 ^estilex_ROADMAP\.md$
 ^README\.Rmd$
 ^vignettes/estilex\.Rmd\.orig$
+^cran-comments\.md$
